@@ -161,6 +161,8 @@ function kill(s, killer) {
 function updateSoldier(s, dt, ctl) {
   const m = G.m;
   if (s.shield > 0) s.shield -= dt;
+  // self-heal: after REGEN_DELAY s without damage, refill from empty to full in REGEN_TIME s
+  if (s.hp < maxHp(s) && G.time - s.lastHitT >= CFG.REGEN_DELAY) s.hp = Math.min(maxHp(s), s.hp + maxHp(s) / CFG.REGEN_TIME * dt);
   s.cacheCD -= dt;
   s.heat = Math.max(0, s.heat - dt * 0.08);
   let mvx = ctl.mx || 0, mvy = ctl.my || 0;
