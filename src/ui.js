@@ -47,8 +47,15 @@ window.addEventListener('keyup', e => { keys.delete(e.code); if (e.code === 'Tab
 window.addEventListener('blur', () => { keys.clear(); mouse.down = false; mouse.right = false; });
 // ---------- first-person mouse look (pointer lock)
 const look = R3.look;
-let wantUnlock = false;
-function lockPointer() { if (document.pointerLockElement !== cv && cv.requestPointerLock) { try { const p = cv.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) { } } }
+let wantUnlock = false, lockFailed = !cv.requestPointerLock;
+// Some embedded pages do not allow pointer lock: then the mouse still looks around while it moves over the
+// game, and holding the cursor near the left or right edge keeps turning.
+function lockPointer() {
+  if (document.pointerLockElement === cv || lockFailed) return;
+  try { const p = cv.requestPointerLock(); if (p && p.catch) p.catch(() => { lockFailed = true; }); } catch (e) { lockFailed = true; }
+}
+document.addEventListener('pointerlockerror', () => { lockFailed = true; });
+function mouseLooks() { return document.pointerLockElement === cv || (lockFailed && G && !G.paused && !G.showMap); }
 function unlockPointer() { if (document.pointerLockElement) { wantUnlock = true; document.exitPointerLock(); } }
 document.addEventListener('pointerlockchange', () => {
   if (document.pointerLockElement) return;
@@ -59,7 +66,7 @@ document.addEventListener('pointerlockchange', () => {
 });
 cv.addEventListener('mousemove', e => {
   mouse.x = e.clientX; mouse.y = e.clientY;
-  if (document.pointerLockElement === cv && G && !G.over) {
+  if (mouseLooks() && G && !G.over) {
     const k = CFG.SENS / (R3.zoom || 1);
     look.yaw += e.movementX * k;
     look.pitch = clamp(look.pitch - e.movementY * k, -1.45, 1.45);
@@ -73,7 +80,7 @@ cv.addEventListener('mousedown', e => {
     if (!G.showMap) lockPointer();
     return;
   }
-  if (G && !G.over && !G.paused && !G.showMap && document.pointerLockElement !== cv) { lockPointer(); if (G.player.alive) return; }
+  if (G && !G.over && !G.paused && !G.showMap && document.pointerLockElement !== cv && !lockFailed) { lockPointer(); if (G.player.alive) return; }
   if (G && !G.player.alive && !G.player.riding && !G.over) { G.specIdx += e.button === 2 ? -1 : 1; return; }
   if (e.button === 0) mouse.down = true; if (e.button === 2) mouse.right = true; });
 window.addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; if (e.button === 2) mouse.right = false; });
@@ -373,6 +380,10 @@ function frame(now) {
   }
   if (G && G.player) {
     const P = G.player;
+    if (lockFailed && !G.paused && !G.showMap && !G.over && mouse.x > 0) {
+      const ex = mouse.x / Math.max(1, VW);
+      if (ex < 0.06) look.yaw -= 2.2 * dt * (1 - ex / 0.06); else if (ex > 0.94) look.yaw += 2.2 * dt * ((ex - 0.94) / 0.06);
+    }
     if (P.alive && !G.wasAlive) { look.yaw = P.angle; look.pitch = 0; }
     G.wasAlive = P.alive;
   }

@@ -219,7 +219,7 @@ function drawHUD() {
     if (P.z > 2) txt(P.z >= CFG.FLOOR_H - 1 ? 'UPPER FLOOR' : 'STAIRS', 312, VH - 116 - 20, `600 11px ${D}`, '#b4d8ff', 'right');
   }
   if (G.headT > 0) G.headT -= 1 / 60;
-  if (!G.over && !G.paused && !G.auto && !document.pointerLockElement && !G.showMap && $('perks').hidden && (P.alive || P.riding))
+  if (!G.over && !G.paused && !G.auto && !document.pointerLockElement && !lockFailed && !G.showMap && $('perks').hidden && (P.alive || P.riding))
     txt('Click to aim with the mouse', VW / 2, VH / 2 + 60, `700 18px ${D}`, '#e6ad45', 'center');
   // air strike status
   const myT = G.teams[P.team];
