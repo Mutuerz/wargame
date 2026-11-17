@@ -40,7 +40,7 @@ function startMatch(m, art, counts, playerSpot, opts = {}) {
       { points: 0, supplyT: CFG.SUPPLY_INTERVAL, sapperT: 100 + Math.random() * 40, counts: botCommanderCounts(), vis: new Uint8Array(GW * GH) },
     ],
     lock: { team: -1, t: 0 }, holdT: 0, dropT: CFG.DROP_INTERVAL, pathBudget: 0, cam: { x: 0, y: 0, shake: 0 }, hurtT: 0, hitT: 0,
-    grenades: [], visT: 0, smokers: [],
+    grenades: [], carts: [], specIdx: 0, visT: 0, smokers: [],
     stats: { captures: [0, 0], bridges: [false, false] },
   };
   for (let t = 0; t < 2; t++) {
@@ -61,6 +61,7 @@ function startMatch(m, art, counts, playerSpot, opts = {}) {
     }
   }
   G.player = G.soldiers[0];
+  for (let t = 0; t < 2; t++) { const c = G.soldiers.filter(x => x.team === t && x.bot && !x.isPlayer && x.cls === CLASSES.rifleman); if (c.length) pickRand(c).bot.guard = true; }
   if (G.auto) { G.player.bot = newBrain(); }
   G.player.c4 = 1;
   for (let i = 0; i < CFG.DROP_START; i++) spawnDrop(true);
@@ -70,15 +71,16 @@ function startMatch(m, art, counts, playerSpot, opts = {}) {
     G.smokers = fl.map(f => ({ x: f.x + f.w / 2, y: f.y + f.h / 2, t: Math.random() }));
   }
   G.cam.x = G.player.x; G.cam.y = G.player.y;
-  message('Capture A, B and C at the same time to win', '#e6ad45', 5);
+  message('Hold all five points (A to E) at the same time to win', '#e6ad45', 5);
 }
 
 function spawnSoldier(s, choice) {
   const m = G.m;
   let base;
-  if (choice.type === 'depot') base = m.depots[s.team];
+  if (choice.type === 'at') base = { x: choice.x, y: choice.y };
+  else if (choice.type === 'depot') base = m.depots[s.team];
   else base = m.spawns[s.team][choice.idx ?? s.spot] || m.spawns[s.team][0];
-  const p = randomFreeNear(m, base.x + (choice.type === 'depot' ? (s.team === 0 ? 110 : -110) : 0), base.y, choice.type === 'depot' ? 80 : 55);
+  const p = randomFreeNear(m, base.x + (choice.type === 'depot' ? (s.team === 0 ? 110 : -110) : 0), base.y, choice.type === 'depot' ? 80 : choice.type === 'at' ? 70 : 55);
   s.x = p.x; s.y = p.y; s.vx = s.vy = 0;
   Perks.reapply(G, s);
   s.hp = maxHp(s); s.alive = true; s.shield = CFG.SPAWN_SHIELD;
@@ -235,6 +237,12 @@ function explode(x, y, radius, maxDmg, attacker) {
     if (d < radius) damage(s, maxDmg * (1 - d / radius), attacker);
   }
   stampScorch(G.art, x, y, radius * 0.5);
+  breakWalls(x, y, radius * 0.75);
+  for (const c of G.carts.slice()) {
+    if (attacker && c.team === attacker.team) continue;
+    const d = dist(c.x, c.y, x, y);
+    if (d < radius + CFG.CART_R) damageCart(c, maxDmg * 1.5 * (1 - Math.max(0, d - CFG.CART_R) / radius), attacker);
+  }
   for (let i = 0; i < 40; i++) {
     const a = Math.random() * TAU, sp = rand(60, 420);
     G.particles.push({ type: 'fire', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.3, 0.8), max: 0.8, size: rand(6, 16) });
@@ -308,6 +316,7 @@ function update(dt) {
   updateCapture(dt);
   updateSupply(dt);
   updateGrenades(dt);
+  updateCarts(dt);
   G.visT -= dt;
   if (G.visT <= 0) { G.visT = 0.15; computeVision(G.player.team); }
   updateDrops(dt);
@@ -325,11 +334,11 @@ function update(dt) {
   for (let t = 0; t < 2; t++) if (m.points.every(p => p.owner === t)) lockTeam = t;
   if (lockTeam !== G.lock.team) {
     G.lock = { team: lockTeam, t: 0 };
-    if (lockTeam >= 0) message(lockTeam === G.player.team ? `We hold all three points. Keep them for ${CFG.WIN_HOLD} s` : `Enemy holds all three points! Retake one within ${CFG.WIN_HOLD} s`, TEAMS[lockTeam].color, 4);
+    if (lockTeam >= 0) message(lockTeam === G.player.team ? `We hold all five points. Keep them for ${CFG.WIN_HOLD} s` : `Enemy holds all five points! Retake one within ${CFG.WIN_HOLD} s`, TEAMS[lockTeam].color, 4);
   }
-  if (lockTeam >= 0) { G.lock.t += dt; if (G.lock.t >= CFG.WIN_HOLD) return endMatch(lockTeam, 'Held all three points at once'); }
+  if (lockTeam >= 0) { G.lock.t += dt; if (G.lock.t >= CFG.WIN_HOLD) return endMatch(lockTeam, 'Held all five points at once'); }
   for (let t = 0; t < 2; t++) {
-    if (m.bridges[t].destroyed && !G.trucks.some(k => k.team === t) && !G.soldiers.some(s => s.team === t && s.alive))
+    if (m.bridges[t].destroyed && !G.trucks.some(k => k.team === t) && !G.carts.some(c => c.team === t) && !G.soldiers.some(s => s.team === t && s.alive))
       return endMatch(1 - t, `${TEAMS[t].name} was wiped out with no bridge left to reinforce`);
   }
   if (G.time >= CFG.TIME_LIMIT) {
@@ -354,6 +363,11 @@ function updateBullets(dt) {
       const t = segCircleHit(b.x, b.y, nx, ny, s.x, s.y, CFG.R);
       if (t >= 0 && t < bestT) { bestT = t; bestS = s; }
     }
+    for (const c of G.carts) {
+      if (c.team === b.team) continue;
+      const t = segCircleHit(b.x, b.y, nx, ny, c.x, c.y, CFG.CART_R);
+      if (t >= 0 && t < bestT) { bestT = t; bestS = c; }
+    }
     // obstacles: step along the segment
     const steps = Math.ceil(Math.hypot(nx - b.x, ny - b.y) / 8);
     for (let k = 1; k <= steps; k++) {
@@ -369,7 +383,9 @@ function updateBullets(dt) {
         break;
       }
     }
-    if (!hit && bestS) { damage(bestS, b.dmg, b.owner); hit = true; b.x = b.x + (nx - b.x) * bestT; b.y = b.y + (ny - b.y) * bestT; }
+    if (!hit && bestS && bestS.isCart) { damageCart(bestS, b.dmg, b.owner); hit = true; b.x += (nx - b.x) * bestT; b.y += (ny - b.y) * bestT;
+      for (let i = 0; i < 3; i++) G.particles.push({ type: 'spark', x: b.x, y: b.y, vx: rand(-120, 120), vy: rand(-120, 120), life: 0.2, max: 0.2, size: 2 }); }
+    else if (!hit && bestS) { damage(bestS, b.dmg, b.owner); hit = true; b.x = b.x + (nx - b.x) * bestT; b.y = b.y + (ny - b.y) * bestT; }
     if (!hit) { b.x = nx; b.y = ny; b.life -= dt; if (b.life > 0) out.push(b); }
   }
   G.bullets = out;
@@ -456,8 +472,9 @@ function updateSupply(dt) {
         let c = G.caches.find(c => c.team === tr.team);
         if (c) c.charges = Math.min(c.charges + CFG.CACHE_CHARGES, CFG.CACHE_MAX);
         else G.caches.push({ team: tr.team, x: d.x, y: d.y, charges: CFG.CACHE_CHARGES });
-        // reinforcements dismount
-        for (const so of G.soldiers) if (so.team === tr.team && !so.alive) spawnSoldier(so, { type: 'depot' });
+        // reinforcements board a transport cart to the front
+        const riders = G.soldiers.filter(so => so.team === tr.team && !so.alive && !so.riding);
+        if (riders.length) launchCart(tr.team, riders);
       }
     } else if (tr.state === 'unload') {
       tr.t -= dt; if (tr.t <= 0) { tr.state = 'out'; tr.dir = -tr.dir; }
@@ -589,4 +606,102 @@ function computeVision(team) {
 function isVisible(team, x, y) {
   if (x < 0 || y < 0 || x >= W || y >= H) return false;
   return G.teams[team].vis[((y / CELL) | 0) * GW + ((x / CELL) | 0)] === 1;
+}
+
+// Grenades and C4 knock down house walls and windows inside the blast.
+function breakWalls(x, y, r) {
+  const m = G.m, hit = [];
+  forBlockersNear(m, x - r, y - r, x + r, y + r, o => {
+    if (!o.breakable) return;
+    const cx = clamp(x, o.x, o.x + o.w), cy = clamp(y, o.y, o.y + o.h);
+    if (dist2(cx, cy, x, y) < r * r) hit.push(o);
+  });
+  if (!hit.length) return;
+  const gone = new Set(hit);
+  m.solids = m.solids.filter(o => !gone.has(o));
+  for (const o of hit) {
+    stampRubble(G.art, o);
+    for (let i = 0; i < 6; i++) G.particles.push({ type: 'dust', x: o.x + Math.random() * o.w, y: o.y + Math.random() * o.h, vx: rand(-60, 60), vy: rand(-60, 60), life: 1.2, max: 1.2, size: rand(8, 16) });
+  }
+  buildGrids(m);
+  for (const s of G.soldiers) if (s.bot) s.bot.path = null;
+}
+
+// ---------------- Transport carts: carry reinforcements from the depot to the front
+function cartTarget(team) {
+  const m = G.m, depot = m.depots[team], ex = team === 0 ? W : 0;
+  const owned = m.points.filter(p => p.owner === team && (team === 0 ? p.c1 : p.c0) === 0);
+  let p, stopShort = false;
+  if (owned.length) p = owned.sort((a, b) => Math.abs(a.x - ex) - Math.abs(b.x - ex))[0];
+  else { p = m.points.slice().sort((a, b) => dist(a.x, a.y, depot.x, depot.y) - dist(b.x, b.y, depot.x, depot.y))[0]; stopShort = true; }
+  let tx = p.x, ty = p.y;
+  if (stopShort) {
+    const d = dist(p.x, p.y, depot.x, depot.y), k = (d - CFG.CAP_R - 160) / d;
+    tx = depot.x + (p.x - depot.x) * k; ty = depot.y + (p.y - depot.y) * k;
+  }
+  const f = randomFreeNear(m, tx, ty, 60);
+  return { x: f.x, y: f.y, name: p.name };
+}
+function launchCart(team, riders) {
+  const m = G.m, d = m.depots[team];
+  const start = { x: d.x + (team === 0 ? 70 : -70), y: d.y };
+  const tgt = cartTarget(team);
+  const path = findPath(m, start.x, start.y, tgt.x, tgt.y);
+  const cart = { isCart: true, team, x: start.x, y: start.y, vx: 0, vy: 0, angle: team === 0 ? 0 : Math.PI, hp: CFG.CART_HP, alive: true,
+    riders, path, pi: 0, target: tgt, spotted: [0, 0], name: 'Transport' };
+  for (const r of riders) r.riding = cart;
+  G.carts.push(cart);
+  if (!path) { dismount(cart); return; }
+  if (team === G.player.team) feed(`Transport with ${riders.length} soldier${riders.length > 1 ? 's' : ''} heading to ${tgt.name}`, TEAMS[team].color);
+}
+function dismount(cart, only) {
+  const list = only ? [only] : cart.riders;
+  for (const r of list) {
+    r.riding = null;
+    spawnSoldier(r, { type: 'at', x: cart.x, y: cart.y });
+    r.shield = CFG.SPAWN_SHIELD;
+  }
+  cart.riders = cart.riders.filter(r => !list.includes(r));
+  if (!cart.riders.length) cart.empty = true;
+}
+function damageCart(c, amount, attacker) {
+  if (!c.alive) return;
+  c.hp -= amount;
+  if (c.hp > 0) return;
+  c.alive = false;
+  G.carts.splice(G.carts.indexOf(c), 1);
+  const n = c.riders.length;
+  for (const r of c.riders) { r.riding = null; r.deaths++; if (attacker) attacker.kills++; }
+  c.riders = [];
+  explode(c.x, c.y, 110, 30, attacker);
+  stampScorch(G.art, c.x, c.y, 50);
+  feed(`${attacker ? attacker.name : 'Blast'} destroyed a ${TEAMS[c.team].name} transport${n ? ` (${n} aboard)` : ''}`, attacker ? TEAMS[attacker.team].color : '#e6ad45');
+  if (c.team === G.player.team && n) message('Our transport was destroyed', '#ff5a4e', 3);
+}
+function updateCarts(dt) {
+  for (const c of G.carts.slice()) {
+    let tx, ty;
+    if (c.empty) {
+      const d = G.m.depots[c.team];
+      if (!c.backPath) { c.backPath = findPath(G.m, c.x, c.y, d.x, d.y) || []; c.pi = 0; }
+      if (c.pi >= c.backPath.length) { G.carts.splice(G.carts.indexOf(c), 1); continue; }
+      tx = c.backPath[c.pi].x; ty = c.backPath[c.pi].y;
+    } else {
+      if (c.pi >= c.path.length) { dismount(c); continue; }
+      tx = c.path[c.pi].x; ty = c.path[c.pi].y;
+    }
+    const dx = tx - c.x, dy = ty - c.y, d = Math.hypot(dx, dy);
+    if (d < 20) { c.pi++; continue; }
+    const want = Math.atan2(dy, dx);
+    c.angle = turnTo(c.angle, want, 3 * dt);
+    const sp = CFG.CART_SPEED * (G.m.slow[((c.y / CELL) | 0) * GW + ((c.x / CELL) | 0)] ? 0.6 : 1) * (Math.abs(angDiff(c.angle, want)) > 0.8 ? 0.4 : 1);
+    c.vx = Math.cos(c.angle) * sp; c.vy = Math.sin(c.angle) * sp;
+    c.x += c.vx * dt; c.y += c.vy * dt;
+    // push soldiers out of the way
+    for (const s of G.soldiers) {
+      if (!s.alive) continue;
+      const ex = s.x - c.x, ey = s.y - c.y, ed = Math.hypot(ex, ey), min = CFG.CART_R + CFG.R;
+      if (ed < min && ed > 0.1) { s.x = c.x + ex / ed * min; s.y = c.y + ey / ed * min; }
+    }
+  }
 }

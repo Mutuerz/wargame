@@ -138,7 +138,7 @@ function solidAt(m, x, y) {
   const i = Math.floor(x / HC), j = Math.floor(y / HC);
   if (i < 0 || j < 0 || i >= HW || j >= HH) return null;
   const list = m.hash[j * HW + i];
-  for (let k = 0; k < list.length; k++) { const o = list[k]; if (!o.water && pointInShape(o, x, y)) return o; }
+  for (let k = 0; k < list.length; k++) { const o = list[k]; if (!o.water && !o.window && pointInShape(o, x, y)) return o; }
   return null;
 }
 

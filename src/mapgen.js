@@ -47,13 +47,16 @@ function tryGenerate(bk, seed, density) {
   });
   const p0 = { x: Math.round(rnd(0.27, 0.35) * W), y: Math.round(rnd(0.2, 0.3) * H) };
   if (R() < 0.5) p0.y = H - p0.y;
+  const p1 = { x: Math.round(rnd(0.4, 0.44) * W), y: Math.round((p0.y < H / 2 ? rnd(0.64, 0.78) : rnd(0.22, 0.36)) * H) };
   const points = [
     { x: p0.x, y: p0.y, name: 'A' },
-    { x: W / 2, y: H / 2, name: 'B' },
-    { x: W - p0.x, y: H - p0.y, name: 'C' },
+    { x: p1.x, y: p1.y, name: 'B' },
+    { x: W / 2, y: H / 2, name: 'C' },
+    { x: W - p1.x, y: H - p1.y, name: 'D' },
+    { x: W - p0.x, y: H - p0.y, name: 'E' },
   ];
 
-  clear.push({ x: points[0].x, y: points[0].y, r: CFG.CAP_R + 50 }, { x: W / 2, y: H / 2, r: CFG.CAP_R + 60 });
+  clear.push({ x: p0.x, y: p0.y, r: CFG.CAP_R + 50 }, { x: p1.x, y: p1.y, r: CFG.CAP_R + 50 }, { x: W / 2, y: H / 2, r: CFG.CAP_R + 60 });
   spawns.forEach(s => clear.push({ x: s.x, y: s.y, r: 100 }));
   clear.push({ x: depot.x, y: depot.y, r: 140 });
   clear.push({ rect: true, x0: 150, y0: by - 75, x1: depot.x + 40, y1: by + 75 });
@@ -145,12 +148,39 @@ function tryGenerate(bk, seed, density) {
       for (let a = a0; a <= a0 + len + 1e-6; a += step) add(circ(cx + Math.cos(a) * rad, cy + Math.sin(a) * rad, 13, 'bag'));
     }
   }
-  const s0 = rnd(0, TAU);
-  ring(points[0].x, points[0].y, 118, [[s0, 1.1], [s0 + 2.1, 1.1], [s0 + 4.2, 1.1]]);
-  add(rect(points[0].x - 17 + Math.cos(s0 + 1.6) * 50, points[0].y - 17 + Math.sin(s0 + 1.6) * 50, 34, 34, 'crate'));
+  for (const p of [p0, p1]) {
+    const s0 = rnd(0, TAU);
+    ring(p.x, p.y, 118, [[s0, 1.1], [s0 + 2.1, 1.1], [s0 + 4.2, 1.1]]);
+    add(rect(p.x - 17 + Math.cos(s0 + 1.6) * 50, p.y - 17 + Math.sin(s0 + 1.6) * 50, 34, 34, 'crate'));
+  }
   const s1 = rnd(0, 0.6);
   ring(W / 2, H / 2, 125, [[s1, 0.9], [s1 + 1.55, 0.9]]);
   add(rect(W / 2 - 75, H / 2 - 17 - 40, 34, 34, 'crate'));
+
+  // --- Houses: walls with windows you can shoot through; grenades and C4 break them
+  function house(x, y, w, h) {
+    const parts = [], th = 14, seg = 40, door = 66;
+    const doors = new Set([ri(0, 3)]); if (R() < 0.6) doors.add(ri(0, 3));
+    for (const sd of [0, 1, 2, 3]) {
+      const horiz = sd === 0 || sd === 2, len = horiz ? w : h;
+      const sx = sd === 1 ? x + w - th : x, sy = sd === 2 ? y + h - th : y;
+      const gap = doors.has(sd) ? rnd(seg, len - door - seg) : -1e9;
+      let k = 0;
+      for (let p = 0; p < len - 1; ) {
+        if (p >= gap && p < gap + door) { p = gap + door; continue; }
+        let l = Math.min(seg, len - p);
+        if (p < gap && p + l > gap) l = gap - p;
+        if (l < 6) { p += l; continue; }
+        const win = k % 3 === 1 && p > th && p + l < len - th;
+        const r = horiz ? rect(sx + p, sy, l, th, win ? 'window' : 'hwall') : rect(sx, sy + p, th, l, win ? 'window' : 'hwall');
+        r.breakable = true; if (win) r.window = true;
+        parts.push(r); p += l; k++;
+      }
+    }
+    parts.floor = { x, y, w, h, kind: 'house' };
+    return parts;
+  }
+  scatter(3, (x, y) => house(x, y, ri(5, 7) * 40, ri(4, 6) * 40), 50);
 
   // --- Pools first (swamp), then biome features
   if (bk === 'swamp') {
@@ -247,7 +277,7 @@ function buildGrids(m) {
   m.shot = new Uint8Array(GW * GH);
   m.slow = new Uint8Array(GW * GH);
   m.blockers = m.solids.concat(m.rivers, m.bridges.filter(b => b.destroyed).map(b => b.gap));
-  for (const o of m.solids) { rasterShape(m.move, o); rasterShape(m.shot, o); }
+  for (const o of m.solids) { rasterShape(m.move, o); if (!o.window) rasterShape(m.shot, o); }
   for (const o of m.rivers) rasterShape(m.move, o);
   for (const b of m.bridges) if (b.destroyed) rasterShape(m.move, b.gap);
   for (const p of m.pools) rasterShape(m.slow, { t: 'c', x: p.x, y: p.y, r: p.r - 12 });

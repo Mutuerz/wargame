@@ -262,6 +262,10 @@ function drawSolid(c, o, B) {
     c.fillStyle = '#7c5d35'; c.fillRect(o.x, o.y, o.w, o.h);
     c.strokeStyle = '#4a3820'; c.lineWidth = 3; c.strokeRect(o.x + 1.5, o.y + 1.5, o.w - 3, o.h - 3);
     c.beginPath(); c.moveTo(o.x + 3, o.y + 3); c.lineTo(o.x + o.w - 3, o.y + o.h - 3); c.moveTo(o.x + o.w - 3, o.y + 3); c.lineTo(o.x + 3, o.y + o.h - 3); c.stroke();
+  } else if (k === 'window') {
+    c.fillStyle = '#4a4038'; c.fillRect(o.x, o.y, o.w, o.h);
+    c.fillStyle = 'rgba(170,210,230,0.55)';
+    if (o.w > o.h) c.fillRect(o.x + 2, o.y + o.h / 2 - 2, o.w - 4, 4); else c.fillRect(o.x + o.w / 2 - 2, o.y + 2, 4, o.h - 4);
   } else if (WALL_COLORS[k]) {
     const [dk, lt] = WALL_COLORS[k];
     c.fillStyle = dk; c.fillRect(o.x, o.y, o.w, o.h);
@@ -343,4 +347,11 @@ function renderRelief(m) {
   }
   g.putImageData(img, 0, 0);
   return c;
+}
+
+function stampRubble(art, o) {
+  const g = art.gctx;
+  g.fillStyle = '#5f574d';
+  for (let i = 0; i < 8; i++) { g.globalAlpha = 0.8; g.beginPath(); g.arc(o.x + Math.random() * o.w, o.y + Math.random() * o.h, 3 + Math.random() * 6, 0, TAU); g.fill(); }
+  g.globalAlpha = 1;
 }

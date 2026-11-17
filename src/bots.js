@@ -7,7 +7,7 @@ function newBrain() {
     enemy: null, vis: false, seeT: 0, scanT: Math.random() * 0.2, react: 0, aimErr: 0.3,
     burst: 0, pause: 0, strafeDir: 1, strafeT: 0, lookA: 0, lookT: 0,
     stuckClock: 0, lx: 0, ly: 0, stuck: 0, nudgeT: 0, nudgeA: 0,
-    bias: [Math.random() * 900, Math.random() * 900, Math.random() * 900],
+    bias: [0, 0, 0, 0, 0].map(() => Math.random() * 900),
     defender: Math.random() < 0.2, role: null,
   };
 }
@@ -30,6 +30,14 @@ function scan(s) {
     if (!losClear(G.m, s.x, s.y, e.x, e.y)) continue;
     bd = d; best = e;
   }
+  if (!best) {
+    // no soldier in sight: shoot at enemy transport carts
+    for (const c of G.carts) {
+      if (c.team === s.team) continue;
+      const d = dist2(s.x, s.y, c.x, c.y);
+      if (d < near * near && losClear(G.m, s.x, s.y, c.x, c.y)) { best = c; break; }
+    }
+  }
   if (best) {
     best.spotted[s.team] = G.time;
     if (b.enemy !== best) { b.react = rand(sk.react[0], sk.react[1]); b.aimErr = rand(sk.aimErr[0], sk.aimErr[1]); }
@@ -47,6 +55,12 @@ function chooseObjective(s) {
   // 1. defuse C4 on our bridge
   const c4 = G.c4s.find(c => c.bridge === t);
   if (c4 && dist(s.x, s.y, c4.x, c4.y) < 1500) { b.obj = { type: 'defuse', x: c4.x, y: c4.y }; return; }
+  // 1b. bridge guard: one bot per team watches its own bridge
+  if (b.guard && !m.bridges[t].destroyed) {
+    const br = m.bridges[t], gx = br.cx + (t === 0 ? 260 : -260);
+    if (!b.obj || b.obj.type !== 'guard' || Math.random() < 0.3) { const f = randomFreeNear(m, gx, br.cy, 160); b.obj = { type: 'guard', x: f.x, y: f.y }; }
+    return;
+  }
   // 2. sapper run
   if (b.role === 'sapper') {
     const br = m.bridges[1 - t];

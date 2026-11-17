@@ -49,6 +49,8 @@ function render(dt) {
   // camera
   const P = G.player;
   let tx = P.x, ty = P.y;
+  const spec = spectateTarget();
+  if (spec) { tx = spec.x; ty = spec.y; }
   if (P.alive && !G.auto && typeof mouse !== 'undefined') {
     const lim = P.scoped ? P.cls.scopeRange * 0.65 : 260;
     const f = P.scoped ? 0.9 : 0.25;
@@ -85,6 +87,7 @@ function render(dt) {
   // obstacles
   forBlockersNear(m, vx0 - 60, vy0 - 60, vx1 + 60, vy1 + 60, o => { if (!o.water) drawSolid(ctx, o, B); });
   drawTrucks();
+  drawCarts();
   // fog of war: dim what your team cannot currently see
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(fogLayer(), 0, 0, W, H);
@@ -178,6 +181,36 @@ function drawDrops() {
     ctx.strokeStyle = '#2c3d20'; ctx.lineWidth = 2; ctx.strokeRect(d.x - 15, d.y - 15, 30, 30);
     ctx.fillStyle = '#fff'; ctx.fillRect(d.x - 3, d.y - 10, 6, 20); ctx.fillRect(d.x - 10, d.y - 3, 20, 6);
     if (d.c4) { ctx.fillStyle = '#e6ad45'; ctx.fillRect(d.x + 8, d.y - 20, 12, 8); }
+  }
+}
+
+function spectateTarget() {
+  const P = G.player;
+  if (P.alive) return null;
+  if (P.riding) return P.riding;
+  const allies = G.soldiers.filter(s => s.alive && s.team === P.team);
+  if (!allies.length) return null;
+  G.specIdx = ((G.specIdx % allies.length) + allies.length) % allies.length;
+  return allies[G.specIdx];
+}
+
+function drawCarts() {
+  for (const c of G.carts) {
+    if (c.team !== G.player.team && !seen(c.x, c.y)) continue;
+    ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.angle);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(-30, -16, 66, 40);
+    ctx.fillStyle = '#151515'; for (const wx of [-18, 18]) { ctx.fillRect(wx - 8, -22, 16, 6); ctx.fillRect(wx - 8, 16, 16, 6); }
+    ctx.fillStyle = '#4b5236'; ctx.fillRect(-32, -18, 64, 36);
+    ctx.fillStyle = TEAMS[c.team].dark; ctx.fillRect(14, -16, 18, 32);
+    ctx.fillStyle = 'rgba(160,200,220,0.6)'; ctx.fillRect(26, -12, 4, 24);
+    // passengers' helmets
+    ctx.fillStyle = TEAMS[c.team].helmet;
+    c.riders.slice(0, 8).forEach((r, i) => { const px = -24 + (i % 4) * 10, py = i < 4 ? -8 : 8; ctx.beginPath(); ctx.arc(px, py, 4.5, 0, TAU); ctx.fill(); });
+    ctx.restore();
+    const f = Math.max(0, c.hp / CFG.CART_HP);
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(c.x - 26, c.y - 38, 52, 6);
+    ctx.fillStyle = f > 0.5 ? '#7fd18b' : f > 0.25 ? '#e6ad45' : '#ff5a4e'; ctx.fillRect(c.x - 26, c.y - 38, 52 * f, 6);
+    if (G.player.riding === c) { ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(c.x, c.y, 42, 0, TAU); ctx.stroke(); }
   }
 }
 
@@ -338,7 +371,7 @@ function drawHUD() {
   const small = VW < 760;
 
   // capture badges
-  const bw = 54, gap = 12, total = 3 * bw + 2 * gap, x0 = VW / 2 - total / 2, y0 = 12;
+  const NPT = m.points.length, bw = 50, gap = 8, total = NPT * bw + (NPT - 1) * gap, x0 = VW / 2 - total / 2, y0 = 12;
   panel(x0 - 128, y0, total + 256, bw);
   m.points.forEach((p, i) => {
     const x = x0 + i * (bw + gap), cxp = x + bw / 2, cyp = y0 + bw / 2;
@@ -354,9 +387,9 @@ function drawHUD() {
   });
   const held0 = m.points.filter(p => p.owner === 0).length, held1 = m.points.filter(p => p.owner === 1).length;
   txt(`BLUE  ${G.teams[0].points} pts`, x0 - 14, y0 + 24, `600 15px ${D}`, TEAMS[0].color, 'right');
-  txt(`holds ${held0}/3`, x0 - 14, y0 + 44, `400 12px ${M}`, '#b4d8ff', 'right');
+  txt(`holds ${held0}/${NPT}`, x0 - 14, y0 + 44, `400 12px ${M}`, '#b4d8ff', 'right');
   txt(`${G.teams[1].points} pts  RED`, x0 + total + 14, y0 + 24, `600 15px ${D}`, TEAMS[1].color, 'left');
-  txt(`holds ${held1}/3`, x0 + total + 14, y0 + 44, `400 12px ${M}`, '#ffc1b9', 'left');
+  txt(`holds ${held1}/${NPT}`, x0 + total + 14, y0 + 44, `400 12px ${M}`, '#ffc1b9', 'left');
 
   if (G.lock.team >= 0) {
     const left = CFG.WIN_HOLD - G.lock.t;
@@ -480,6 +513,7 @@ function drawMap(c, x, y, w, h, big) {
   }
   for (const d of G.drops) { c.fillStyle = '#7fd18b'; c.fillRect(x + d.x * s - 3, y + d.y * s - 3, 6, 6); }
   for (const t of G.trucks) { if (t.team !== P.team && !seen(t.x, t.y)) continue; c.fillStyle = TEAMS[t.team].light; c.fillRect(x + t.x * s - 4, y + t.y * s - 3, 8, 6); }
+  for (const k of G.carts) { if (k.team !== P.team && !seen(k.x, k.y)) continue; c.fillStyle = TEAMS[k.team].light; c.fillRect(x + k.x * s - 4, y + k.y * s - 4, 8, 8); c.strokeStyle = '#000'; c.strokeRect(x + k.x * s - 4, y + k.y * s - 4, 8, 8); }
   for (const k of G.c4s) { if (Math.sin(G.time * 12) > 0) { c.fillStyle = '#ff3b2f'; circle(c, x + k.x * s, y + k.y * s, 5); } }
   for (const so of G.soldiers) {
     if (!so.alive) continue;

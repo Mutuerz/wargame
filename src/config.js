@@ -18,10 +18,13 @@ const CFG = {
   SPAWN_SHIELD: 1.5,
   CAP_R: 170,                 // capture radius
   CAP_RATE: 4,                // % per second per soldier (max 3 counted): 25 s alone from neutral
-  WIN_HOLD: 20,               // seconds a team must keep all three points to win
+  WIN_HOLD: 15,               // seconds a team must keep all five points to win
   SUPPLY_INTERVAL: 60,        // a truck every minute: ammo, health and reinforcements
   TRUCK_SPEED: 170,
   CACHE_CHARGES: 6,
+  CART_HP: 350,               // transport cart: carries reinforcements from the depot to the front
+  CART_R: 28,
+  CART_SPEED: 160,
   CACHE_MAX: 12,
   GRENADE_CHANCE: 0.5,        // half the soldiers spawn with a grenade
   GRENADE_RANGE: 380,         // max throw distance
@@ -45,7 +48,7 @@ const CFG = {
   HOLD_REWARD: 5,             // per held point, every HOLD_TICK seconds
   HOLD_TICK: 10,
   SABOTAGE_REWARD: 50,
-  TIME_LIMIT: 25 * 60,
+  TIME_LIMIT: 10 * 60,
   VIEW_H: 1000,               // world pixels visible vertically
 };
 
@@ -131,7 +134,8 @@ const BIOMES = {
 const BIOME_KEYS = Object.keys(BIOMES);
 
 const WALL_COLORS = {
+  hwall: ['#6f6458', '#a39584'],
   timber: ['#5f4830', '#86683f'], adobe: ['#a9875c', '#d1b285'], concrete: ['#838079', '#aeaaa2'],
   cabin: ['#5a412d', '#7e5d40'], hut: ['#4b3d26', '#6b5a39'],
 };
-const FLOOR_COLORS = { timber: '#5a4832', adobe: '#b39669', concrete: '#7a7871', cabin: '#6c5238', hut: '#4f4630' };
+const FLOOR_COLORS = { house: '#6e5a45', timber: '#5a4832', adobe: '#b39669', concrete: '#7a7871', cabin: '#6c5238', hut: '#4f4630' };

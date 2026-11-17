@@ -26,6 +26,9 @@ window.addEventListener('keydown', e => {
   if (e.code === 'Escape') togglePause();
   else if (e.code === 'KeyR') reloadPressed = true;
   else if (e.code === 'KeyG') throwPressed = true;
+  else if (e.code === 'KeyE' && G.player.riding) dismount(G.player.riding, G.player);
+  else if (!G.player.alive && (e.code === 'Space' || e.code === 'ArrowRight')) G.specIdx++;
+  else if (!G.player.alive && e.code === 'ArrowLeft') G.specIdx--;
   else if (e.code === 'KeyM') G.showMap = !G.showMap;
   else if (e.code === 'KeyP') togglePerks();
   else if (e.code === 'KeyN') { const on = SFX.toggle(); message(on ? 'Sound on' : 'Sound muted', '#8e9b92', 1.5); }
@@ -34,7 +37,9 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => { keys.delete(e.code); if (e.code === 'Tab' && G) G.showScores = false; });
 window.addEventListener('blur', () => { keys.clear(); mouse.down = false; mouse.right = false; });
 cv.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
-cv.addEventListener('mousedown', e => { if (e.button === 0) mouse.down = true; if (e.button === 2) mouse.right = true; SFX.init(); });
+cv.addEventListener('mousedown', e => {
+  if (G && !G.player.alive && !G.player.riding && !G.over) { G.specIdx += e.button === 2 ? -1 : 1; return; }
+  if (e.button === 0) mouse.down = true; if (e.button === 2) mouse.right = true; SFX.init(); });
 window.addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; if (e.button === 2) mouse.right = false; });
 cv.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -240,12 +245,15 @@ function updateRespawnDock() {
   const t = P.team, tm = G.teams[t];
   const truck = G.trucks.find(k => k.team === t && k.state === 'in');
   let msg;
-  if (G.m.bridges[t].destroyed) msg = 'You were killed. Our bridge is down, so no more reinforcements can arrive.';
-  else if (truck) msg = 'You were killed. Your truck is crossing the bridge now.';
+  const spec = spectateTarget();
+  const specTxt = spec && !P.riding ? ` Spectating ${spec.name}: click or Space to switch.` : '';
+  if (P.riding) msg = `Riding the transport to point ${P.riding.target.name} (${Math.ceil(P.riding.hp)} HP). Press E to jump out early.`;
+  else if (G.m.bridges[t].destroyed) msg = 'You were killed. Our bridge is down, so no more reinforcements can arrive.' + specTxt;
+  else if (truck) msg = 'You were killed. Your truck is crossing the bridge now.' + specTxt;
   else {
     const lane = G.m.truckLanes[t];
     const eta = tm.supplyT + Math.abs(lane.to - lane.from) / CFG.TRUCK_SPEED;
-    msg = `You were killed. You return with the next truck in ${eta.toFixed(0)} s.`;
+    msg = `You were killed. You return with the next truck in ${eta.toFixed(0)} s.` + specTxt;
   }
   $('respawnText').textContent = msg;
 }

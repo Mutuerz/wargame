@@ -1,6 +1,6 @@
 # Bridgehead
 
-A 2D top-down team shooter that runs in the browser. Two teams of 10 fight over three capture points on a procedurally generated, symmetrical map. You play one Blue soldier and command Blue's deployment; everyone else is a bot.
+A 2D top-down team shooter that runs in the browser. Two teams of 10 fight over five capture points on a procedurally generated, symmetrical map. You play one Blue soldier and command Blue's deployment; everyone else is a bot.
 
 ## Run it
 
@@ -22,6 +22,8 @@ A keyboard and mouse are required.
 | Shift | Sprint (you cannot fire while sprinting) |
 | G | Throw grenade toward the cursor (if you carry one) |
 | Right click (hold) or Q | Sniper scope: hold position and see/shoot much farther |
+| E | Jump off the transport cart early |
+| Click / Space / ← → (while dead) | Switch which teammate you spectate |
 | F (hold 3 s) | Plant C4 on the enemy bridge, or defuse C4 on yours |
 | M | Toggle the full map |
 | Tab (hold) | Scoreboard |
@@ -40,8 +42,10 @@ On the deployment screen (this sets where the squad starts the match): left clic
 - **Grenades:** each soldier has a 50% chance to spawn carrying one. Throw range is at most 380 px, it bounces off cover, and it detonates 5 seconds later (170 px radius, walls block the blast, no friendly fire). Bots throw at enemies hiding behind cover and run from live grenades.
 - **Fog of war:** you only see what your team sees. Each soldier lights up a radius around them (750 px riflemen, 950 px snipers) blocked by obstacles, plus a scope cone for snipers. Enemies outside that area are hidden on screen and on the minimap.
 - **Terrain height:** the ground has hills and ridges, shown with shading and contour lines (one line every half level). Shooting at a point lower than you gives 1.1× accuracy; shooting uphill gives 1.2× more spread. The HUD shows ▼ DOWNHILL or ▲ UPHILL when it applies.
-- **Capture points:** A, B and C sit in the neutral zone with sandbag cover. Standing in the circle captures it (faster with more soldiers, up to 3; contested points freeze). **Win** by holding all three at the same time for 20 seconds. After 25 minutes, the team holding more points wins.
-- **Trucks and respawn:** every minute each team's truck crosses its bridge to the base depot. It restocks the depot (walk onto the crates for full health and ammo) and it is the **only way back into the fight**: everyone who died since the last truck rides in on it and dismounts at the depot.
+- **Capture points:** five points, A to E, sit in the neutral zone with sandbag cover (C is in the center, B and D are mirrored, A is nearest Blue and E nearest Red). Standing in the circle captures it (faster with more soldiers, up to 3; contested points freeze). **Win** by holding all five at the same time for 15 seconds. The match lasts **10 minutes**; at the limit the team holding more points wins, then the team with more perk points.
+- **Houses:** each map has six stone houses (three per side, mirrored) with doors and windows. Windows block movement but not bullets or vision, so you can shoot out of them. Grenade and C4 blasts knock down walls and windows.
+- **Trucks, carts and respawn:** every minute each team's truck crosses its bridge to the base depot and restocks it (walk onto the crates for full health and ammo). It is the **only way back into the fight**: everyone who died since the last truck boards a **transport cart** at the depot. The cart drives to your team's frontmost uncontested point (or stops short of the nearest point if you hold none) and the soldiers jump off there. Carts have 350 HP and can be shot or blown up; if one is destroyed, everyone aboard is lost until the next truck. Press E to jump off your cart early. One bot per team guards its own bridge.
+- **Spectating:** while dead, the camera follows a living teammate. Click (right click goes back), Space or the arrow keys switch between teammates. While riding a cart, the camera follows the cart.
 - **C4:** you start with one charge. Stand on the marked section in the middle of the enemy bridge and hold F for 3 seconds. After a 5 second fuse the bridge is destroyed: that team gets no more trucks, supplies or reinforcements. A team whose bridge is down and whose last soldier dies loses. Red sends its own sappers at your bridge from time to time.
 - **Supply drops:** crates parachute in at random spots at least 1500 px from both bases (2 at the start, more every 75 s, up to 4 on the map). They refill your spare magazines, give 60 health and sometimes a C4 charge.
 
