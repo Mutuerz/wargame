@@ -1,0 +1,71 @@
+'use strict';
+// Synthesized sound effects (no audio files). Starts on the first click.
+const SFX = {
+  ctx: null, on: true, shotWin: 0, shotN: 0, listener: { x: 0, y: 0 },
+  init() {
+    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
+    try {
+      const C = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new C();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = 0.45;
+      this.master.connect(this.ctx.destination);
+      const len = this.ctx.sampleRate;
+      const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      this.noise = buf;
+      this.startWind();
+    } catch (e) { this.ctx = null; }
+  },
+  toggle() { this.on = !this.on; if (this.master) this.master.gain.value = this.on ? 0.45 : 0; return this.on; },
+  vol(x, y) {
+    const d = dist(x, y, this.listener.x, this.listener.y);
+    if (d > 2600) return 0;
+    return 1 / (1 + d / 380);
+  },
+  burst(v, freq, q, dur, type = 'bandpass', rate = 1) {
+    const c = this.ctx, t = c.currentTime;
+    const src = c.createBufferSource(); src.buffer = this.noise; src.playbackRate.value = rate * (0.85 + Math.random() * 0.3);
+    const f = c.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+    const g = c.createGain(); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    src.connect(f); f.connect(g); g.connect(this.master);
+    src.start(t, Math.random() * 0.5); src.stop(t + dur + 0.05);
+  },
+  tone(v, f0, f1, dur, type = 'sine') {
+    const c = this.ctx, t = c.currentTime;
+    const o = c.createOscillator(); o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+    const g = c.createGain(); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + dur + 0.05);
+  },
+  ok() { return this.ctx && this.on; },
+  shot(x, y, mine) {
+    if (!this.ok()) return;
+    const now = this.ctx.currentTime;
+    if (now - this.shotWin > 0.05) { this.shotWin = now; this.shotN = 0; }
+    if (++this.shotN > 6) return;
+    const v = this.vol(x, y) * (mine ? 0.8 : 0.5);
+    if (v < 0.02) return;
+    this.burst(v, 1400, 0.7, 0.11);
+    this.tone(v * 0.6, 160, 45, 0.09, 'triangle');
+  },
+  boom(x, y) {
+    if (!this.ok()) return;
+    const v = Math.min(1, this.vol(x, y) * 2.2);
+    this.burst(v, 300, 0.5, 1.4, 'lowpass', 0.5);
+    this.tone(v, 90, 25, 0.9, 'sine');
+  },
+  click(v = 0.25) { if (this.ok()) this.tone(v, 1800, 900, 0.04, 'square'); },
+  reload() { if (!this.ok()) return; this.tone(0.15, 600, 300, 0.06, 'square'); setTimeout(() => this.ok() && this.tone(0.18, 900, 500, 0.05, 'square'), 260); },
+  beep(x, y) { if (this.ok()) this.tone(this.vol(x, y) * 0.4, 1760, 1760, 0.08, 'square'); },
+  pickup() { if (this.ok()) { this.tone(0.2, 520, 780, 0.12, 'triangle'); } },
+  capture(good) { if (this.ok()) { this.tone(0.25, good ? 440 : 330, good ? 880 : 165, 0.45, 'triangle'); } },
+  hit() { if (this.ok()) this.tone(0.12, 2400, 1800, 0.03, 'square'); },
+  startWind() {
+    const c = this.ctx;
+    const src = c.createBufferSource(); src.buffer = this.noise; src.loop = true; src.playbackRate.value = 0.3;
+    const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 380;
+    const g = c.createGain(); g.gain.value = 0.05;
+    src.connect(f); f.connect(g); g.connect(this.master); src.start();
+  },
+};
