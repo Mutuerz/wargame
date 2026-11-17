@@ -9,12 +9,11 @@ function generateMap(biomeKey, seed) {
     const density = attempt < 6 ? 1 : 0.7;
     const m = tryGenerate(biomeKey, (seed + attempt * 7919) >>> 0, density);
     buildGrids(m);
-    if (checkConnectivity(m)) { m.seed = seed; m.solids.forEach((o, i) => { o.sid = i; }); return m; }
+    if (checkConnectivity(m)) { m.seed = seed; finishMap(m); return m; }
   }
   const m = tryGenerate(biomeKey, seed >>> 0, 0.4);
-  buildGrids(m);
   m.seed = seed;
-  m.solids.forEach((o, i) => { o.sid = i; });
+  finishMap(m);
   return m;
 }
 
@@ -26,6 +25,11 @@ function rotShape(o) {
   return r;
 }
 const rotPt = p => Object.assign({}, p, { x: W - p.x, y: H - p.y });
+function rotFloor(f) {
+  const r = Object.assign({}, f, { x: W - f.x - f.w, y: H - f.y - f.h });
+  if (f.stair) r.stair = { x0: W - f.stair.x0, y0: H - f.stair.y0, x1: W - f.stair.x1, y1: H - f.stair.y1, w: f.stair.w };
+  return r;
+}
 
 function tryGenerate(bk, seed, density) {
   const R = mulberry32(seed);
@@ -158,30 +162,63 @@ function tryGenerate(bk, seed, density) {
   ring(W / 2, H / 2, 125, [[s1, 0.9], [s1 + 1.55, 0.9]]);
   add(rect(W / 2 - 75, H / 2 - 17 - 40, 34, 34, 'crate'));
 
-  // --- Houses: walls with windows you can shoot through; grenades and C4 break them
+  // --- Houses: stone walls with windows you can shoot through; grenades and C4 break them.
+  // Up to two storeys: two-storey houses get a staircase along one inside wall and windows all round upstairs.
   function house(x, y, w, h) {
-    const parts = [], th = 14, seg = 40, door = 66;
+    const parts = [], th = 14, seg = 40, door = 66, FH = CFG.FLOOR_H;
     const doors = new Set([ri(0, 3)]); if (R() < 0.6) doors.add(ri(0, 3));
-    for (const sd of [0, 1, 2, 3]) {
-      const horiz = sd === 0 || sd === 2, len = horiz ? w : h;
-      const sx = sd === 1 ? x + w - th : x, sy = sd === 2 ? y + h - th : y;
-      const gap = doors.has(sd) ? rnd(seg, len - door - seg) : -1e9;
-      let k = 0;
-      for (let p = 0; p < len - 1; ) {
-        if (p >= gap && p < gap + door) { p = gap + door; continue; }
-        let l = Math.min(seg, len - p);
-        if (p < gap && p + l > gap) l = gap - p;
-        if (l < 6) { p += l; continue; }
-        const win = k % 3 === 1 && p > th && p + l < len - th;
-        const r = horiz ? rect(sx + p, sy, l, th, win ? 'window' : 'hwall') : rect(sx, sy + p, th, l, win ? 'window' : 'hwall');
-        r.breakable = true; if (win) r.window = true;
-        parts.push(r); p += l; k++;
+    const stories = R() < CFG.TWO_STOREY ? 2 : 1;
+    function walls(storey) {
+      for (const sd of [0, 1, 2, 3]) {
+        const horiz = sd === 0 || sd === 2, len = horiz ? w : h;
+        const sx = sd === 1 ? x + w - th : x, sy = sd === 2 ? y + h - th : y;
+        const gap = storey === 0 && doors.has(sd) ? rnd(seg, len - door - seg) : -1e9;
+        let k = 0;
+        for (let p = 0; p < len - 1; ) {
+          if (p >= gap && p < gap + door) { p = gap + door; continue; }
+          let l = Math.min(seg, len - p);
+          if (p < gap && p + l > gap) l = gap - p;
+          if (l < 6) { p += l; continue; }
+          const win = k % (storey ? 2 : 3) === 1 && p > th && p + l < len - th;
+          const r = horiz ? rect(sx + p, sy, l, th, win ? 'window' : 'hwall') : rect(sx, sy + p, th, l, win ? 'window' : 'hwall');
+          r.breakable = true; if (win) r.window = true;
+          r.z0 = storey * FH; r.z1 = r.z0 + FH;
+          if (storey) r.up = true;
+          parts.push(r); p += l; k++;
+        }
       }
     }
-    parts.floor = { x, y, w, h, kind: 'house' };
+    walls(0);
+    let stair = null;
+    if (stories === 2) {
+      walls(1);
+      // staircase along an inside wall without a door, climbing toward the middle of that wall
+      const L = CFG.STAIR_LEN, SW = CFG.STAIR_W;
+      const sides = [0, 1, 2, 3].filter(sd => ((sd === 0 || sd === 2) ? w : h) - 2 * th >= L + 95);
+      const free = sides.filter(sd => !doors.has(sd));
+      const sd = (free.length ? free : sides)[ri(0, (free.length ? free : sides).length - 1)];
+      if (sd !== undefined) {
+        const horiz = sd === 0 || sd === 2, len = horiz ? w : h;
+        const a = th + 50 + rnd(0, Math.max(0, len - 2 * th - L - 95));   // offset of the bottom step along the wall
+        const dir = R() < 0.5 ? 1 : -1;
+        let x0, y0, x1, y1;
+        if (horiz) {
+          const yy = sd === 0 ? y + th + SW / 2 : y + h - th - SW / 2;
+          const s0 = dir > 0 ? x + a : x + w - a;
+          x0 = s0; x1 = s0 + dir * L; y0 = y1 = yy;
+        } else {
+          const xx = sd === 3 ? x + th + SW / 2 : x + w - th - SW / 2;
+          const s0 = dir > 0 ? y + a : y + h - a;
+          y0 = s0; y1 = s0 + dir * L; x0 = x1 = xx;
+        }
+        stair = { x0, y0, x1, y1, w: SW };
+      }
+    }
+    parts.floor = { x, y, w, h, kind: 'house', stories: stair ? 2 : 1, stair };
+    if (!stair) for (let i = parts.length - 1; i >= 0; i--) if (parts[i].up) parts.splice(i, 1);
     return parts;
   }
-  scatter(3, (x, y) => house(x, y, ri(5, 7) * 40, ri(4, 6) * 40), 50);
+  scatter(3, (x, y) => house(x, y, ri(6, 8) * 40, ri(5, 6) * 40), 50);
 
   // --- Pools first (swamp), then biome features
   if (bk === 'swamp') {
@@ -244,7 +281,7 @@ function tryGenerate(bk, seed, density) {
     solids,
     rivers: rivers.concat(rivers.map(rotShape)),
     pools: pools.concat(pools.map(rotShape)),
-    floors: floors.concat(floors.map(f => ({ x: W - f.x - f.w, y: H - f.y - f.h, w: f.w, h: f.h, kind: f.kind }))),
+    floors: floors.concat(floors.map(rotFloor)),
     bridges: [Object.assign({}, bridge, { team: 0, destroyed: false }), Object.assign(b1, { team: 1, destroyed: false })],
     depots: [depot, rotPt(depot)],
     spawns: [spawns, spawns.map(rotPt)],
@@ -252,6 +289,47 @@ function tryGenerate(bk, seed, density) {
     height: buildHeight(R),
     truckLanes: [{ y: by, from: -110, to: depot.x - 70, dir: 1 }, { y: H - by, from: W + 110, to: W - depot.x + 70, dir: -1 }],
   };
+}
+
+// Heights: flatten the ground under every building, then give each obstacle its vertical extent.
+function finishMap(m) {
+  const hm = m.height;
+  for (const f of m.floors) {
+    const pad = 30;
+    const i0 = Math.max(0, Math.floor((f.x - pad) / CELL)), i1 = Math.min(GW - 1, Math.floor((f.x + f.w + pad) / CELL));
+    const j0 = Math.max(0, Math.floor((f.y - pad) / CELL)), j1 = Math.min(GH - 1, Math.floor((f.y + f.h + pad) / CELL));
+    let sum = 0, n = 0;
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { sum += hm[j * GW + i]; n++; }
+    const v = n ? sum / n : 0;
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) hm[j * GW + i] = v;
+    f.base = v * CFG.LEVEL_H;
+    if (f.stair) {
+      const st = f.stair, hw = st.w / 2;
+      st.rx = Math.min(st.x0, st.x1) - (st.x0 === st.x1 ? hw : 0); st.ry = Math.min(st.y0, st.y1) - (st.y0 === st.y1 ? hw : 0);
+      st.rw = Math.abs(st.x1 - st.x0) || st.w; st.rh = Math.abs(st.y1 - st.y0) || st.w;
+    }
+  }
+  m.houses = m.floors.filter(f => f.kind === 'house');
+  m.solids.forEach((o, i) => {
+    o.sid = i;
+    if (o.z0 === undefined) o.z0 = 0;
+    if (o.z1 === undefined) o.z1 = o.z0 + obstHeight(o);
+    const c = o.t === 'c' ? [o.x, o.y] : [o.x + o.w / 2, o.y + o.h / 2];
+    o.gz = elevAt(m, c[0], c[1]);
+  });
+  buildGrids(m);
+}
+function elevAt(m, x, y) { return heightAt(m, x, y) * CFG.LEVEL_H; }
+// The house whose footprint contains (x, y), if any.
+function houseAt(m, x, y) {
+  for (const f of m.houses) if (x > f.x && x < f.x + f.w && y > f.y && y < f.y + f.h) return f;
+  return null;
+}
+function inStair(st, x, y) { return x >= st.rx && x <= st.rx + st.rw && y >= st.ry && y <= st.ry + st.rh; }
+// 0 at the bottom step, 1 at the top.
+function stairT(st, x, y) {
+  const dx = st.x1 - st.x0, dy = st.y1 - st.y0, l2 = dx * dx + dy * dy;
+  return clamp(((x - st.x0) * dx + (y - st.y0) * dy) / l2, 0, 1);
 }
 
 function rasterShape(grid, o) {
@@ -275,10 +353,19 @@ function rasterShape(grid, o) {
 // Builds collision/LOS/nav grids and the obstacle spatial hash. Call again when a bridge is destroyed.
 function buildGrids(m) {
   m.move = new Uint8Array(GW * GH);
-  m.shot = new Uint8Array(GW * GH);
+  m.shot = new Uint8Array(GW * GH);     // blocks sight at standing eye height on the ground
+  m.shotHi = new Uint8Array(GW * GH);   // blocks sight at upper-floor eye height
+  m.shotAny = new Uint8Array(GW * GH);  // anything a bullet could hit (quick reject)
   m.slow = new Uint8Array(GW * GH);
   m.blockers = m.solids.concat(m.rivers, m.bridges.filter(b => b.destroyed).map(b => b.gap));
-  for (const o of m.solids) { rasterShape(m.move, o); if (!o.window) rasterShape(m.shot, o); }
+  const eyeLo = CFG.EYE, eyeHi = CFG.FLOOR_H + CFG.EYE;
+  for (const o of m.solids) {
+    if (!o.up) rasterShape(m.move, o);
+    rasterShape(m.shotAny, o);
+    if (o.window) continue;
+    if (!o.up && o.z1 >= eyeLo) rasterShape(m.shot, o);
+    if (o.z0 <= eyeHi && o.z1 >= eyeHi) rasterShape(m.shotHi, o);
+  }
   for (const o of m.rivers) rasterShape(m.move, o);
   for (const b of m.bridges) if (b.destroyed) rasterShape(m.move, b.gap);
   for (const p of m.pools) rasterShape(m.slow, { t: 'c', x: p.x, y: p.y, r: p.r - 12 });

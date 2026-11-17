@@ -6,7 +6,7 @@ let G = null;
 function makeSoldier(team, idx, isPlayer) {
   return {
     id: team * 100 + idx, team, idx, isPlayer, name: CALLSIGNS[team][idx] || (TEAMS[team].name + '-' + (idx + 1)),
-    x: 0, y: 0, vx: 0, vy: 0, angle: team === 0 ? 0 : Math.PI,
+    x: 0, y: 0, z: 0, vx: 0, vy: 0, angle: team === 0 ? 0 : Math.PI, pitch: 0,
     hp: CFG.HP, alive: false, respawnT: 0, shield: 0,
     cls: CLASSES.rifleman, nades: 0, scoped: false, aimX: 0, aimY: 0,
     mag: 25, mags: [], reloading: false, reloadT: 0, reloadMax: 1, fireCD: 0, heat: 0,
@@ -87,7 +87,7 @@ function spawnSoldier(s, choice) {
   else if (choice.type === 'depot') base = m.depots[s.team];
   else base = m.spawns[s.team][choice.idx ?? s.spot] || m.spawns[s.team][0];
   const p = randomFreeNear(m, base.x + (choice.type === 'depot' ? (s.team === 0 ? 110 : -110) : 0), base.y, choice.type === 'depot' ? 80 : choice.type === 'at' ? 70 : 55);
-  s.x = p.x; s.y = p.y; s.vx = s.vy = 0;
+  s.x = p.x; s.y = p.y; s.z = 0; s.vx = s.vy = 0; s.pitch = 0;
   Perks.reapply(G, s);
   s.hp = maxHp(s); s.alive = true; s.shield = CFG.SPAWN_SHIELD;
   refillAmmo(s); s.fireCD = 0; s.heat = 0; s.scoped = false;
@@ -123,18 +123,41 @@ function finishReload(s) {
 function shoot(s, moving) {
   const spread = currentSpread(s, moving);
   const a = s.angle + (Math.random() - 0.5) * 2 * spread;
-  const mx = s.x + Math.cos(s.angle) * 26, my = s.y + Math.sin(s.angle) * 26;
-  G.bullets.push({ x: mx, y: my, px: mx, py: my, vx: Math.cos(a) * s.cls.bulletSpeed, vy: Math.sin(a) * s.cls.bulletSpeed,
-    life: s.cls.range / s.cls.bulletSpeed, team: s.team, owner: s, dmg: s.cls.dmg * s.mods.dmg, sniper: s.cls === CLASSES.sniper });
+  const pa = clamp(s.pitch + (Math.random() - 0.5) * 2 * spread * CFG.V_SPREAD, -1.4, 1.4);
+  const mx = s.x + Math.cos(s.angle) * 18, my = s.y + Math.sin(s.angle) * 18, mz = eyeZ(s) - 3;
+  const sp = s.cls.bulletSpeed, cp = Math.cos(pa);
+  G.bullets.push({ x: mx, y: my, z: mz, px: mx, py: my, vx: Math.cos(a) * sp * cp, vy: Math.sin(a) * sp * cp, vz: Math.sin(pa) * sp,
+    life: s.cls.range / sp, team: s.team, owner: s, dmg: s.cls.dmg * s.mods.dmg, sniper: s.cls === CLASSES.sniper });
   s.mag--; s.fireCD = 1 / s.cls.rate; s.heat = Math.min(0.05, s.heat + (s.cls.auto ? 0.008 : 0.03));
   G.particles.push({ type: 'flash', x: mx, y: my, a: s.angle, life: 0.05, max: 0.05 });
   if (Math.random() < 0.5) stampCasing(G.art, s.x + Math.cos(s.angle + 1.6) * 16, s.y + Math.sin(s.angle + 1.6) * 16);
   SFX.shot(s.x, s.y, s.isPlayer);
 }
 
+// Heights in the world: the floor a soldier stands on, and their eyes.
+function feetZ(s) { return elevAt(G.m, s.x, s.y) + (s.z || 0); }
+function eyeZ(s) { return feetZ(s) + CFG.EYE; }
+function chestZ(s) { return feetZ(s) + CFG.BODY_H * 0.62; }
+// Floors: a staircase ramps between the ground floor and the upper floor of a two-storey house.
+// Walking into the side of the staircase from below is blocked (px, py: position before this step).
+function updateFloor(m, s, px, py) {
+  const f = houseAt(m, s.x, s.y);
+  if (!f || f.stories < 2) { s.z = 0; return; }
+  const st = f.stair, FH = CFG.FLOOR_H;
+  if (inStair(st, s.x, s.y)) {
+    const t = stairT(st, s.x, s.y), z = t * FH;
+    if ((s.z || 0) < z - 22 && px !== undefined) {
+      // came in under the high end of the stairs: stay on the ground floor
+      if (!inStair(st, px, s.y)) s.x = px; else if (!inStair(st, s.x, py)) s.y = py; else { s.x = px; s.y = py; }
+      s.z = 0; return;
+    }
+    s.z = z; return;
+  }
+  s.z = (s.z || 0) >= FH / 2 ? FH : 0;
+}
 // Terrain: shooting downhill tightens spread, uphill widens it.
 function slopeFactor(s) {
-  const d = heightAt(G.m, s.x, s.y) - heightAt(G.m, s.aimX, s.aimY);
+  const d = (feetZ(s) - elevAt(G.m, s.aimX, s.aimY)) / CFG.LEVEL_H;
   if (d > CFG.HEIGHT_STEP) return 1 / CFG.DOWNHILL_ACC;
   if (d < -CFG.HEIGHT_STEP) return CFG.UPHILL_PEN;
   return 1;
@@ -145,12 +168,12 @@ function currentSpread(s, moving) {
   return sp * slopeFactor(s);
 }
 
-function damage(target, amount, attacker) {
+function damage(target, amount, attacker, head) {
   if (!target.alive || target.shield > 0) return;
   target.hp -= amount;
   target.lastHitBy = attacker; target.lastHitT = G.time;
-  if (target.isPlayer) G.hurtT = 0.45;
-  if (attacker && attacker.isPlayer) { G.hitT = 0.15; SFX.hit(); }
+  if (target.isPlayer) { G.hurtT = 0.45; if (attacker) G.hurtFrom = Math.atan2(attacker.y - target.y, attacker.x - target.x); }
+  if (attacker && attacker.isPlayer) { G.hitT = 0.15; if (head) G.headT = 0.3; SFX.hit(); }
   if (Math.random() < 0.6) stampBlood(G.art, target.x + rand(-10, 10), target.y + rand(-10, 10), rand(3, 7));
   for (let i = 0; i < 4; i++) G.particles.push({ type: 'blood', x: target.x, y: target.y, vx: rand(-80, 80), vy: rand(-80, 80), life: 0.4, max: 0.4, size: rand(1.5, 3) });
   if (target.hp <= 0) kill(target, attacker);
@@ -184,6 +207,7 @@ function updateSoldier(s, dt, ctl) {
   const sprint = ctl.sprint && moving && !fire && !s.reloading;
 
   if (ctl.aimX !== undefined) { s.aimX = ctl.aimX; s.aimY = ctl.aimY; }
+  if (ctl.pitch !== undefined) s.pitch = clamp(ctl.pitch, -1.4, 1.4);
   s.scoped = !!(ctl.scope && s.cls.scopeRange && !moving && !s.reloading);
   if (ctl.throwAt && s.nades > 0) throwGrenade(s, ctl.throwAt.x, ctl.throwAt.y);
   if (ctl.reload) startReload(s);
@@ -206,8 +230,10 @@ function updateSoldier(s, dt, ctl) {
   if (fire) speed *= 0.8;
   const k = 1 - Math.exp(-dt * 14);
   s.vx = lerp(s.vx, mvx * speed, k); s.vy = lerp(s.vy, mvy * speed, k);
+  const ox = s.x, oy = s.y;
   s.x += s.vx * dt; s.y += s.vy * dt;
   collideCircle(m, s, CFG.R);
+  updateFloor(m, s, ox, oy);
   if (moving) s.walkPhase += dt * speed * 0.12;
 
   s.fireCD -= dt;
@@ -241,16 +267,18 @@ function doAction(s, a) {
   }
 }
 
-function explode(x, y, radius, maxDmg, attacker) {
+function explode(x, y, radius, maxDmg, attacker, z) {
   SFX.boom(x, y);
+  if (z === undefined) z = elevAt(G.m, x, y) + 6;
   for (const s of G.soldiers) {
     if (!s.alive || (attacker && s.team === attacker.team && s !== attacker)) continue;
-    if (!losClear(G.m, x, y, s.x, s.y)) continue;   // walls block blast
-    const d = dist(s.x, s.y, x, y);
-    if (d < radius) damage(s, maxDmg * (1 - d / radius), attacker);
+    const cz = chestZ(s), d = Math.hypot(s.x - x, s.y - y, (cz - z) * 0.8);
+    if (d >= radius) continue;
+    if (!los3(G.m, x, y, z + 8, s.x, s.y, cz)) continue;   // walls, floors and hills block the blast
+    damage(s, maxDmg * (1 - d / radius), attacker);
   }
-  stampScorch(G.art, x, y, radius * 0.5);
-  breakWalls(x, y, radius * 0.75);
+  if (z - elevAt(G.m, x, y) < 20) stampScorch(G.art, x, y, radius * 0.5);
+  breakWalls(x, y, radius * 0.75, z);
   for (const c of G.carts.slice()) {
     if (attacker && c.team === attacker.team) continue;
     const d = dist(c.x, c.y, x, y);
@@ -374,39 +402,50 @@ function updateBullets(dt) {
   const out = [];
   for (const b of G.bullets) {
     b.px = b.x; b.py = b.y;
-    const nx = b.x + b.vx * dt, ny = b.y + b.vy * dt;
+    const nx = b.x + b.vx * dt, ny = b.y + b.vy * dt, nz = b.z + b.vz * dt;
     let hit = false;
-    // soldiers
-    let bestT = 2, bestS = null;
+    // soldiers: the 2D hit circle, then the height of the bullet against the body (headshots above HEAD_H)
+    let bestT = 2, bestS = null, head = false;
     for (const s of G.soldiers) {
       if (!s.alive || s.team === b.team) continue;
       const t = segCircleHit(b.x, b.y, nx, ny, s.x, s.y, CFG.R);
-      if (t >= 0 && t < bestT) { bestT = t; bestS = s; }
+      if (t < 0 || t >= bestT) continue;
+      const bz = b.z + (nz - b.z) * t, fz = feetZ(s);
+      if (bz < fz - 2 || bz > fz + CFG.BODY_H + 2) continue;
+      bestT = t; bestS = s; head = bz > fz + CFG.HEAD_H;
     }
     for (const c of G.carts) {
       if (c.team === b.team) continue;
       const t = segCircleHit(b.x, b.y, nx, ny, c.x, c.y, CFG.CART_R);
-      if (t >= 0 && t < bestT) { bestT = t; bestS = c; }
+      if (t < 0 || t >= bestT) continue;
+      const bz = b.z + (nz - b.z) * t, fz = elevAt(m, c.x, c.y);
+      if (bz > fz + 44) continue;
+      bestT = t; bestS = c; head = false;
     }
-    // obstacles: step along the segment
+    // obstacles, terrain, floors and roofs: step along the segment
     const steps = Math.ceil(Math.hypot(nx - b.x, ny - b.y) / 8);
+    let pz = b.z;
     for (let k = 1; k <= steps; k++) {
       const t = k / steps;
       if (bestS && t > bestT) break;
-      const x = b.x + (nx - b.x) * t, y = b.y + (ny - b.y) * t;
-      if (x < 0 || y < 0 || x > W || y > H) { hit = true; break; }
-      if (m.shot[((y / CELL) | 0) * GW + ((x / CELL) | 0)] && solidAt(m, x, y)) {
+      const x = b.x + (nx - b.x) * t, y = b.y + (ny - b.y) * t, z = b.z + (nz - b.z) * t;
+      if (x < 0 || y < 0 || x > W || y > H || z > 2000) { hit = true; break; }
+      if (blockedAt(m, x, y, z) || slabBetween(m, x, y, pz, z)) {
         hit = true;
-        for (let i = 0; i < 3; i++) G.particles.push({ type: 'spark', x, y, vx: -b.vx * 0.08 + rand(-90, 90), vy: -b.vy * 0.08 + rand(-90, 90), life: 0.2, max: 0.2, size: 2 });
-        G.particles.push({ type: 'dust', x, y, vx: rand(-20, 20), vy: rand(-20, 20), life: 0.5, max: 0.5, size: rand(5, 9) });
-        b.x = x; b.y = y;
+        for (let i = 0; i < 3; i++) G.particles.push({ type: 'spark', x, y, z, vx: -b.vx * 0.08 + rand(-90, 90), vy: -b.vy * 0.08 + rand(-90, 90), life: 0.2, max: 0.2, size: 2 });
+        G.particles.push({ type: 'dust', x, y, z, vx: rand(-20, 20), vy: rand(-20, 20), life: 0.5, max: 0.5, size: rand(5, 9) });
+        b.x = x; b.y = y; b.z = z;
         break;
       }
+      pz = z;
     }
     if (!hit && bestS && bestS.isCart) { damageCart(bestS, b.dmg, b.owner); hit = true; b.x += (nx - b.x) * bestT; b.y += (ny - b.y) * bestT;
-      for (let i = 0; i < 3; i++) G.particles.push({ type: 'spark', x: b.x, y: b.y, vx: rand(-120, 120), vy: rand(-120, 120), life: 0.2, max: 0.2, size: 2 }); }
-    else if (!hit && bestS) { damage(bestS, b.dmg, b.owner); hit = true; b.x = b.x + (nx - b.x) * bestT; b.y = b.y + (ny - b.y) * bestT; }
-    if (!hit) { b.x = nx; b.y = ny; b.life -= dt; if (b.life > 0) out.push(b); }
+      for (let i = 0; i < 3; i++) G.particles.push({ type: 'spark', x: b.x, y: b.y, z: b.z + (nz - b.z) * bestT, vx: rand(-120, 120), vy: rand(-120, 120), life: 0.2, max: 0.2, size: 2 }); }
+    else if (!hit && bestS) {
+      damage(bestS, b.dmg * (head ? CFG.HEADSHOT : 1), b.owner, head);
+      hit = true; b.x = b.x + (nx - b.x) * bestT; b.y = b.y + (ny - b.y) * bestT;
+    }
+    if (!hit) { b.x = nx; b.y = ny; b.z = nz; b.life -= dt; if (b.life > 0) out.push(b); }
   }
   G.bullets = out;
 }
@@ -578,7 +617,7 @@ function throwGrenade(s, tx, ty) {
   dx /= d; dy /= d;
   const k = 2.2;                       // ground friction; total travel = v0 / k
   s.nades--;
-  G.grenades.push({ x: s.x + dx * 20, y: s.y + dy * 20, vx: dx * reach * k, vy: dy * reach * k, k, fuse: CFG.GRENADE_FUSE, team: s.team, owner: s, spin: 0 });
+  G.grenades.push({ x: s.x + dx * 20, y: s.y + dy * 20, z: s.z || 0, vx: dx * reach * k, vy: dy * reach * k, k, fuse: CFG.GRENADE_FUSE, team: s.team, owner: s, spin: 0 });
   if (s.isPlayer) SFX.click(0.15);
 }
 function updateGrenades(dt) {
@@ -586,57 +625,85 @@ function updateGrenades(dt) {
   for (const g of G.grenades.slice()) {
     g.fuse -= dt;
     const nx = g.x + g.vx * dt, ny = g.y + g.vy * dt;
-    if (solidAt(m, nx, g.y)) g.vx = -g.vx * 0.45; else g.x = nx;
-    if (solidAt(m, g.x, ny)) g.vy = -g.vy * 0.45; else g.y = ny;
+    if (solidAt(m, nx, g.y, g.z)) g.vx = -g.vx * 0.45; else g.x = nx;
+    if (solidAt(m, g.x, ny, g.z)) g.vy = -g.vy * 0.45; else g.y = ny;
     g.x = clamp(g.x, 5, W - 5); g.y = clamp(g.y, 5, H - 5);
+    if (g.z > 0) { const f = houseAt(m, g.x, g.y); if (!f || f.stories < 2 || inStair(f.stair, g.x, g.y)) g.z = 0; }   // rolls off the upper floor
     const f = Math.exp(-g.k * dt); g.vx *= f; g.vy *= f;
     g.spin += Math.hypot(g.vx, g.vy) * dt * 0.1;
     if (g.fuse <= 0) {
       G.grenades.splice(G.grenades.indexOf(g), 1);
-      explode(g.x, g.y, CFG.GRENADE_RADIUS, CFG.GRENADE_DMG, g.owner);
+      explode(g.x, g.y, CFG.GRENADE_RADIUS, CFG.GRENADE_DMG, g.owner, elevAt(m, g.x, g.y) + g.z + 4);
     }
   }
 }
 
-// ---------------- Fog of war: shared team vision on the coarse grid
-function castVision(vis, m, x, y, range, a0, a1, rays) {
-  const step = 12;
+// ---------------- Fog of war: shared team vision on the fine grid
+// Rays stop at obstacles taller than eye height and at hill crests (a cell counts as seen when the top
+// of a soldier standing there would be visible). Upper floors use their own grid: you see over low cover.
+function castVision(vis, grid, m, x, y, eyeZ, targetH, range, a0, a1, rays) {
+  const step = 14, hm = m.height, LH = CFG.LEVEL_H;
   for (let r = 0; r < rays; r++) {
     const a = a0 + (a1 - a0) * (r + 0.5) / rays, cx = Math.cos(a), cy = Math.sin(a);
-    for (let d = 0; d <= range; d += step) {
+    let maxS = -Infinity;
+    for (let d = step; d <= range; d += step) {
       const px = x + cx * d, py = y + cy * d;
       if (px < 0 || py < 0 || px >= W || py >= H) break;
-      vis[((py / CELL) | 0) * GW + ((px / CELL) | 0)] = 1;
-      if (m.shot[((py / CELL) | 0) * GW + ((px / CELL) | 0)]) break;
+      const idx = ((py / CELL) | 0) * GW + ((px / CELL) | 0), e = hm[idx] * LH;
+      if ((e + targetH - eyeZ) / d >= maxS) vis[idx] = 1;
+      const gs = (e - eyeZ) / d; if (gs > maxS) maxS = gs;
+      if (grid[idx]) break;
     }
   }
 }
 function computeVision(team) {
-  const m = G.m, vis = G.teams[team].vis;
-  vis.fill(0);
+  const m = G.m, tm = G.teams[team], vis = tm.vis;
+  if (!tm.visHi) tm.visHi = new Uint8Array(GW * GH);
+  const visHi = tm.visHi;
+  vis.fill(0); visHi.fill(0);
   G.visN = (G.visN || 0) + 1;
+  const RAYS = 220, upH = CFG.FLOOR_H + CFG.BODY_H;
   for (const s of G.soldiers) {
     if (!s.alive || s.team !== team) continue;
-    castVision(vis, m, s.x, s.y, visionRange(s), 0, TAU, 240);
-    if (s.scoped) castVision(vis, m, s.x, s.y, s.cls.scopeRange, s.angle - s.cls.scopeCone, s.angle + s.cls.scopeCone, 110);
+    const ez = eyeZ(s), up = s.z >= CFG.FLOOR_H / 2, range = visionRange(s);
+    castVision(vis, up ? m.shotHi : m.shot, m, s.x, s.y, ez, CFG.BODY_H, range, 0, TAU, RAYS);
+    if (s.scoped) castVision(vis, up ? m.shotHi : m.shot, m, s.x, s.y, ez, CFG.BODY_H, s.cls.scopeRange, s.angle - s.cls.scopeCone, s.angle + s.cls.scopeCone, 110);
+    // upper floors of houses in range: sight lines at window height
+    for (const f of m.houses) {
+      if (f.stories < 2) continue;
+      const fx = f.x + f.w / 2, fy = f.y + f.h / 2, d = dist(s.x, s.y, fx, fy);
+      const reach = s.scoped ? s.cls.scopeRange : range;
+      if (d > reach + 200) continue;
+      if (d < Math.max(f.w, f.h)) { castVision(visHi, m.shotHi, m, s.x, s.y, ez, upH, Math.min(reach, d + 300), 0, TAU, 90); continue; }
+      const ac = Math.atan2(fy - s.y, fx - s.x), half = Math.atan2(Math.max(f.w, f.h) * 0.75, d);
+      castVision(visHi, m.shotHi, m, s.x, s.y, ez, upH, Math.min(reach, d + 300), ac - half, ac + half, Math.max(4, Math.ceil(half * 2 / TAU * RAYS * 1.5)));
+    }
     // always see the space right around you
     const r = Math.ceil(CFG.VISION_NEAR / CELL), ci = (s.x / CELL) | 0, cj = (s.y / CELL) | 0;
-    for (let j = cj - r; j <= cj + r; j++) for (let i = ci - r; i <= ci + r; i++) if (i >= 0 && j >= 0 && i < GW && j < GH && (i - ci) ** 2 + (j - cj) ** 2 <= r * r) vis[j * GW + i] = 1;
+    for (let j = cj - r; j <= cj + r; j++) for (let i = ci - r; i <= ci + r; i++) if (i >= 0 && j >= 0 && i < GW && j < GH && (i - ci) ** 2 + (j - cj) ** 2 <= r * r) { vis[j * GW + i] = 1; if (s.z > 0) visHi[j * GW + i] = 1; }
   }
-  for (const e of G.soldiers) if (e.alive && e.team !== team && isVisible(team, e.x, e.y)) e.spotted[team] = G.time;
+  for (const e of G.soldiers) if (e.alive && e.team !== team && soldierVisible(team, e)) e.spotted[team] = G.time;
 }
 function isVisible(team, x, y) {
   if (x < 0 || y < 0 || x >= W || y >= H) return false;
   return G.teams[team].vis[((y / CELL) | 0) * GW + ((x / CELL) | 0)] === 1;
 }
+// Soldiers on an upper floor are seen through the windows (the visHi grid).
+function soldierVisible(team, s) {
+  if (!(s.z >= CFG.FLOOR_H / 2)) return isVisible(team, s.x, s.y);
+  const v = G.teams[team].visHi;
+  if (!v || s.x < 0 || s.y < 0 || s.x >= W || s.y >= H) return false;
+  return v[((s.y / CELL) | 0) * GW + ((s.x / CELL) | 0)] === 1;
+}
 
 // Grenades and C4 knock down house walls and windows inside the blast.
-function breakWalls(x, y, r) {
+function breakWalls(x, y, r, z) {
   const m = G.m, hit = [];
+  if (z === undefined) z = elevAt(m, x, y);
   forBlockersNear(m, x - r, y - r, x + r, y + r, o => {
     if (!o.breakable) return;
-    const cx = clamp(x, o.x, o.x + o.w), cy = clamp(y, o.y, o.y + o.h);
-    if (dist2(cx, cy, x, y) < r * r) hit.push(o);
+    const cx = clamp(x, o.x, o.x + o.w), cy = clamp(y, o.y, o.y + o.h), cz = clamp(z, o.gz + o.z0, o.gz + o.z1);
+    if (dist2(cx, cy, x, y) + (cz - z) ** 2 < r * r) hit.push(o);
   });
   if (!hit.length) return;
   const gone = new Set(hit);

@@ -36,7 +36,7 @@ function renderGround(m) {
   }
   g.globalAlpha = 1;
 
-  g.drawImage(renderRelief(m), 0, 0, W, H);
+  // (hills are real 3D terrain now; the shading and contour lines only go on the map thumbnail)
 
   // biome ground detail
   g.lineCap = 'round';
@@ -189,6 +189,7 @@ function renderThumb(m, ground) {
   const TW = 960, TH = 576, s = TW / W;
   const c = makeCanvas(TW, TH), g = c.getContext('2d');
   g.drawImage(ground, 0, 0, TW, TH);
+  g.drawImage(renderRelief(m), 0, 0, TW, TH);
   g.fillStyle = 'rgba(15,18,16,0.75)';
   for (const o of m.solids) {
     g.beginPath();

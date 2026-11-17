@@ -195,8 +195,8 @@ const NET = {
     P.alive = me.alive;
     if (!me.alive) { this.pending = []; this.pred = null; if (P.riding) { P.x = P.riding.x; P.y = P.riding.y; } return; }
     const shownX = this.pred ? this.pred.x + this.off.x : me.x, shownY = this.pred ? this.pred.y + this.off.y : me.y;
-    const pr = this.pred || (this.pred = { x: me.x, y: me.y, vx: 0, vy: 0, walkPhase: 0 });
-    pr.x = me.x; pr.y = me.y; pr.vx = me.vx; pr.vy = me.vy;
+    const pr = this.pred || (this.pred = { x: me.x, y: me.y, z: 0, vx: 0, vy: 0, walkPhase: 0 });
+    pr.x = me.x; pr.y = me.y; pr.z = me.z || 0; pr.vx = me.vx; pr.vy = me.vy;
     pr.reloading = P.reloading; pr.cls = P.cls; pr.mods = P.mods;
     this.pending = this.pending.filter(i => i.seq > me.ack);
     for (const i of this.pending) netMove(pr, i, NET_STEP);
@@ -213,8 +213,8 @@ const NET = {
   onEvent(e) {
     const P = G.player, k = e[0];
     if (k === 'b') {
-      const [, x, y, vx, vy, life, team, sniper, owner] = e;
-      G.bullets.push({ x, y, vx, vy, life, team, sniper: !!sniper });
+      const [, x, y, vx, vy, life, team, sniper, owner, z, vz] = e;
+      G.bullets.push({ x, y, z: z || 0, vx, vy, vz: vz || 0, life, team, sniper: !!sniper, mine: owner === P.id });
       G.particles.push({ type: 'flash', x, y, a: Math.atan2(vy, vx), life: 0.05, max: 0.05 });
       if (Math.random() < 0.5) { const a = Math.atan2(vy, vx); stampCasing(G.art, x - Math.cos(a) * 26 + Math.cos(a + 1.6) * 16, y - Math.sin(a) * 26 + Math.sin(a + 1.6) * 16); }
       SFX.shot(x, y, owner === P.id);
@@ -283,7 +283,7 @@ const NET = {
       const k = Math.exp(-dt * 10); this.off.x *= k; this.off.y *= k;
       const nx = this.pred.x + this.off.x, ny = this.pred.y + this.off.y;
       P.walkPhase += Math.hypot(nx - P.x, ny - P.y) * 0.12;
-      P.x = nx; P.y = ny; P.vx = this.pred.vx; P.vy = this.pred.vy;
+      P.x = nx; P.y = ny; P.z = this.pred.z; P.vx = this.pred.vx; P.vy = this.pred.vy;
     }
     netUpdateBullets(dt);
     updateParticles(dt);
@@ -304,7 +304,7 @@ const NET = {
     P.aimX = ctl.aimX; P.aimY = ctl.aimY;
     const flags = (ctl.fire ? 1 : 0) | (ctl.sprint ? 2 : 0) | (ctl.interact ? 4 : 0) | (ctl.scope ? 8 : 0);
     const inp = { seq: ++this.seq, mx: ctl.mx, my: ctl.my, fire: !!ctl.fire, sprint: !!ctl.sprint };
-    this.send({ t: 'i', d: [0, inp.seq, ctl.mx, ctl.my, flags, Math.round(ctl.aimX), Math.round(ctl.aimY)] });
+    this.send({ t: 'i', d: [0, inp.seq, ctl.mx, ctl.my, flags, Math.round(ctl.aimX), Math.round(ctl.aimY), Math.round(ctl.pitch * 1000)] });
     if (ctl.reload) this.act({ a: 'reload' });
     if (ctl.throwAt) this.act({ a: 'throw', x: Math.round(ctl.throwAt.x), y: Math.round(ctl.throwAt.y) });
     if (this.pred) { netMove(this.pred, inp, NET_STEP); this.pending.push(inp); if (this.pending.length > 120) this.pending.shift(); }
@@ -332,7 +332,7 @@ const NET = {
       const na = A.solMap.get(s.id) || nb;
       const x = L(na[1], nb[1]), y = L(na[2], nb[2]);
       if (s.alive && s.x > -9000) s.walkPhase += Math.hypot(x - s.x, y - s.y) * 0.12;
-      s.alive = true; s.x = x; s.y = y; s.angle = LA(na[3], nb[3]);
+      s.alive = true; s.x = x; s.y = y; s.z = L(na[8] || 0, nb[8] || 0); s.pitch = nb[9] || 0; s.angle = LA(na[3], nb[3]);
       s.hp = nb[4];
       const fl = nb[5];
       s.reloading = !!(fl & 1); s.scoped = !!(fl & 2); s.shield = fl & 4 ? 1 : 0;
@@ -358,7 +358,7 @@ const NET = {
     });
     for (const k of this.carts.keys()) if (!live.has(k) && !(P.riding && P.riding.nid === k)) this.carts.delete(k);
     const ga = byId(A.gr, 0);
-    G.grenades = B.gr.map(g => { const a = ga.get(g[0]) || g; return { x: L(a[1], g[1]), y: L(a[2], g[2]), fuse: g[3], team: g[4], spin: g[5] }; });
+    G.grenades = B.gr.map(g => { const a = ga.get(g[0]) || g; return { nid: g[0], x: L(a[1], g[1]), y: L(a[2], g[2]), fuse: g[3], team: g[4], spin: g[5], z: g[6] || 0 }; });
     G.c4s = B.c4.map(c => ({ x: c[0], y: c[1], fuse: c[2], bridge: c[3], team: c[4], beep: c[5] }));
     const oldDrops = new Map(G.drops.map(d => [d.nid, d]));
     G.drops = B.drops.map(d => { const o = oldDrops.get(d[0]); return { nid: d[0], x: d[1], y: d[2], fall: d[3], c4: !!d[4], t: o ? o.t : Math.random() * 10 }; });
@@ -380,37 +380,42 @@ function netMove(s, inp, dt) {
   if (inp.fire) speed *= 0.8;
   const k = 1 - Math.exp(-dt * 14);
   s.vx = lerp(s.vx, mvx * speed, k); s.vy = lerp(s.vy, mvy * speed, k);
+  const ox = s.x, oy = s.y;
   s.x += s.vx * dt; s.y += s.vy * dt;
   collideCircle(G.m, s, CFG.R);
+  updateFloor(G.m, s, ox, oy);
 }
 
 // Tracers are cosmetic on the client: they stop at walls and soldiers, the server decides the hits.
 function netUpdateBullets(dt) {
   const m = G.m, out = [];
   for (const b of G.bullets) {
-    const nx = b.x + b.vx * dt, ny = b.y + b.vy * dt;
+    const nx = b.x + b.vx * dt, ny = b.y + b.vy * dt, nz = b.z + b.vz * dt;
     let bestT = 2;
     for (const s of G.soldiers) {
       if (!s.alive || s.team === b.team || s.x < -9000) continue;
       const t = segCircleHit(b.x, b.y, nx, ny, s.x, s.y, CFG.R);
-      if (t >= 0 && t < bestT) bestT = t;
+      if (t < 0 || t >= bestT) continue;
+      const bz = b.z + (nz - b.z) * t, fz = feetZ(s);
+      if (bz >= fz - 2 && bz <= fz + CFG.BODY_H + 2) bestT = t;
     }
-    let hit = bestT <= 1;
+    let hit = bestT <= 1, pz = b.z;
     const steps = Math.ceil(Math.hypot(nx - b.x, ny - b.y) / 8);
     for (let k = 1; k <= steps; k++) {
       const t = k / steps;
       if (t > bestT) break;
-      const x = b.x + (nx - b.x) * t, y = b.y + (ny - b.y) * t;
+      const x = b.x + (nx - b.x) * t, y = b.y + (ny - b.y) * t, z = b.z + (nz - b.z) * t;
       if (x < 0 || y < 0 || x > W || y > H) { hit = true; break; }
-      if (m.shot[((y / CELL) | 0) * GW + ((x / CELL) | 0)] && solidAt(m, x, y)) {
+      if (blockedAt(m, x, y, z) || slabBetween(m, x, y, pz, z)) {
         hit = true;
-        for (let i = 0; i < 3; i++) G.particles.push({ type: 'spark', x, y, vx: -b.vx * 0.08 + rand(-90, 90), vy: -b.vy * 0.08 + rand(-90, 90), life: 0.2, max: 0.2, size: 2 });
-        G.particles.push({ type: 'dust', x, y, vx: rand(-20, 20), vy: rand(-20, 20), life: 0.5, max: 0.5, size: rand(5, 9) });
+        for (let i = 0; i < 3; i++) G.particles.push({ type: 'spark', x, y, z, vx: -b.vx * 0.08 + rand(-90, 90), vy: -b.vy * 0.08 + rand(-90, 90), life: 0.2, max: 0.2, size: 2 });
+        G.particles.push({ type: 'dust', x, y, z, vx: rand(-20, 20), vy: rand(-20, 20), life: 0.5, max: 0.5, size: rand(5, 9) });
         break;
       }
+      pz = z;
     }
     if (hit) continue;
-    b.x = nx; b.y = ny; b.life -= dt;
+    b.x = nx; b.y = ny; b.z = nz; b.life -= dt;
     if (b.life > 0) out.push(b);
   }
   G.bullets = out;

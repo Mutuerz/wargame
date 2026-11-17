@@ -55,27 +55,52 @@ const CFG = {
   HOLD_TICK: 10,
   SABOTAGE_REWARD: 50,
   TIME_LIMIT: 10 * 60,
-  VIEW_H: 1000,               // world pixels visible vertically
+  VIEW_H: 1000,               // world pixels visible vertically (top-down map views)
+  // ---- 3D (world units are the same pixels as the map; about 20 px = 1 m)
+  LEVEL_H: 60,                // height of one terrain level
+  EYE: 30,                    // eye height above the floor
+  BODY_H: 36,                 // soldier hitbox height
+  HEAD_H: 28,                 // hits above this height are headshots
+  HEADSHOT: 1.6,              // headshot damage multiplier
+  FLOOR_H: 64,                // one storey of a house
+  STAIR_LEN: 110, STAIR_W: 36,
+  TWO_STOREY: 0.67,           // share of houses that get an upper floor
+  FOV: 75,                    // camera field of view (degrees)
+  SCOPE_ZOOM: 5,              // sniper scope magnification
+  SENS: 0.0022,               // mouse look sensitivity (radians per pixel)
+  V_SPREAD: 0.6,              // vertical spread relative to horizontal
 };
+// Obstacle heights above the ground they stand on (px). Windows leave a gap you can see and shoot through.
+const OBST_H = {
+  tree: 230, pine: 250, deadtree: 150, cactus: 52, bag: 22, crate: 30, log: 20, car: 32, barrier: 26, snowwall: 36,
+  hwall: 64, window: 64, timber: 62, adobe: 66, concrete: 84, cabin: 60, hut: 54,
+};
+const WIN_LO = 20, WIN_HI = 48;   // window opening, above the storey floor
+function obstHeight(o) {
+  if (o.kind === 'rock') return o.r * 1.15;
+  if (o.kind === 'ice') return o.r * 1.0;
+  if (o.kind === 'rubble') return o.r * 0.7;
+  return OBST_H[o.kind] || 40;
+}
 
 // Weapons / classes. The commander picks one per soldier on the deployment screen.
 const CLASSES = {
   rifleman: {
     name: 'Rifleman', mag: 25, mags: 2, rate: 10, reload: 2.2, reloadEmpty: 2.8, dmg: 15,
-    bulletSpeed: 1500, range: 1050, spread: 0.035, spreadMove: 0.07, speed: 1, vision: 750, auto: true,
+    bulletSpeed: 1500, range: 1250, spread: 0.035, spreadMove: 0.07, speed: 1, vision: 1300, auto: true,
   },
   sniper: {
     name: 'Sniper', mag: 5, mags: 3, rate: 0.9, reload: 3.0, reloadEmpty: 3.4, dmg: 75,
-    bulletSpeed: 2600, range: 2200, spread: 0.01, spreadMove: 0.1, speed: 0.95, vision: 950, auto: false,
-    scopeRange: 1900, scopeCone: 0.32, scopeSpread: 0.35,
+    bulletSpeed: 2600, range: 2600, spread: 0.01, spreadMove: 0.1, speed: 0.95, vision: 1500, auto: false,
+    scopeRange: 2400, scopeCone: 0.32, scopeSpread: 0.35,
   },
   smg: {
     name: 'SMG', mag: 30, mags: 2, rate: 14, reload: 1.8, reloadEmpty: 2.2, dmg: 11,
-    bulletSpeed: 1400, range: 650, spread: 0.06, spreadMove: 0.08, speed: 1.1, vision: 700, auto: true,
+    bulletSpeed: 1400, range: 700, spread: 0.06, spreadMove: 0.08, speed: 1.1, vision: 1200, auto: true,
   },
   lmg: {
     name: 'Machine gun', mag: 60, mags: 1, rate: 9, reload: 4.5, reloadEmpty: 5, dmg: 16,
-    bulletSpeed: 1500, range: 1150, spread: 0.05, spreadMove: 0.11, speed: 0.85, vision: 750, auto: true,
+    bulletSpeed: 1500, range: 1300, spread: 0.05, spreadMove: 0.11, speed: 0.85, vision: 1300, auto: true,
   },
 };
 for (const k in CLASSES) CLASSES[k].key = k;

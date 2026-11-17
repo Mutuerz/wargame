@@ -1,15 +1,15 @@
 # Bridgehead
 
-A 2D top-down team shooter that runs in the browser. Two teams of 10 fight over five capture points on a procedurally generated, symmetrical map. You play one Blue soldier and command Blue's deployment; everyone else is a bot.
+A first-person 3D team shooter that runs in the browser (Three.js, bundled in `src/vendor/`). Two teams of 10 fight over five capture points on a procedurally generated, symmetrical map with real hills and two-storey houses. You play one Blue soldier and command Blue's deployment; everyone else is a bot.
 
 ## Run it
 
-No build step and no dependencies. Either:
+No build step and no install. Either:
 
 - open `index.html` directly in Chrome, Edge or Firefox, or
 - serve the folder, for example `python3 -m http.server` and visit `http://localhost:8000`.
 
-A keyboard and mouse are required.
+A keyboard and mouse are required, and a browser with WebGL. Click the game once to capture the mouse (Esc releases it and opens the menu).
 
 ## Play online
 
@@ -21,21 +21,22 @@ free Oracle Cloud VM (setup script included) is in [deploy/README.md](deploy/REA
 
 | Key | Action |
 | --- | --- |
-| W A S D / arrows | Move |
-| Mouse | Aim |
+| Click | Capture the mouse for looking around |
+| W A S D / arrows | Move (relative to where you look) |
+| Mouse | Look and aim |
 | Left click (hold) | Fire (automatic) |
 | R | Reload |
 | Shift | Sprint (you cannot fire while sprinting) |
-| G | Throw grenade toward the cursor (if you carry one) |
-| Right click (hold) or Q | Sniper scope: hold position and see/shoot much farther |
-| B | Air strike: mark a target (needs 500 team points). Works on the full map (M) too. Esc or right click cancels |
+| G | Throw a grenade where you look (look up to throw at full range) |
+| Right click (hold) or Q | Sniper scope: hold position, 5× zoom, see farther |
+| B | Air strike: opens the map, click to mark a target (needs 500 team points). Esc cancels |
 | E | Jump off the transport cart early |
-| Click / Space / ← → (while dead) | Switch which teammate you spectate |
+| Click / Space / ← → (while dead) | Switch which teammate you watch (camera behind them) |
 | F (hold 3 s) | Plant C4 on the enemy bridge, or defuse C4 on yours |
 | M | Toggle the full map |
 | Tab (hold) | Scoreboard |
 | P | Perk points panel |
-| Esc | Pause |
+| Esc | Release the mouse and open the menu (pause offline) |
 | N | Mute or unmute |
 
 On the deployment screen (this sets where the squad starts the match): left click a spawn on the map to send a soldier there, right click to pull one back, shift-click (or "Spawn here") to choose where you spawn. Below the map, the **Loadout** row sets the weapon each soldier (you included) carries for the whole match.
@@ -58,10 +59,11 @@ On the deployment screen (this sets where the squad starts the match): left clic
 - **Air strike:** once your team pool has 500 points, press B (the HUD shows AIR STRIKE READY) and click a target, on screen or on the full map. The strike is announced to both teams: a 380 × 150 px rectangle appears on the ground, on the minimap and on the map with a 10 second countdown and warning beeps. Then a bomber passes over and everything still inside the rectangle takes 130 damage, friend or foe, carts included, and house walls inside it collapse. The 500 points come out of the same pool that perks will use. One strike per team at a time. Red's commander calls strikes too, on groups of Blue soldiers it can see, and bots run out of any marked zone.
 - **Self-heal:** after 10 seconds without taking damage, soldiers heal steadily back to full health; from nearly dead it takes 5 seconds. Any hit restarts the 10-second wait.
 - **Grenades:** each soldier has a 50% chance to spawn carrying one. Throw range is at most 380 px, it bounces off cover, and it detonates 5 seconds later (170 px radius, walls block the blast, no friendly fire). Bots throw at enemies hiding behind cover and run from live grenades.
-- **Fog of war:** you only see what your team sees. Each soldier lights up a radius around them (750 px riflemen, 950 px snipers) blocked by obstacles, plus a scope cone for snipers. Enemies outside that area are hidden on screen and on the minimap.
-- **Terrain height:** the ground has hills and ridges, shown with shading and contour lines (one line every half level). Shooting at a point lower than you gives 1.1× accuracy; shooting uphill gives 1.2× more spread. The HUD shows ▼ DOWNHILL or ▲ UPHILL when it applies.
+- **First person and 3D:** the world is 3D (about 20 map px = 1 m). Bullets fly in 3D: low cover (sandbags, crates, logs, cars, low rocks) stops shots at its height, so you can fire over sandbags and an enemy behind them only shows the head and shoulders. Hits above the shoulders are **headshots** (1.6× damage). Hills block bullets and sight.
+- **Fog of war:** you only see enemies your team sees. Each soldier sees about 1300 px (snipers 1500, scope 2400) unless trees, walls, tall rocks or a hill crest are in the way; low cover does not block sight. Unseen enemies are not drawn, in the 3D view or on the minimap.
+- **Terrain height:** hills and ridges are real 3D terrain (the map views keep the contour lines). Shooting at a point lower than you gives 1.1× accuracy; shooting uphill gives 1.2× more spread. The HUD shows ▼ DOWNHILL or ▲ UPHILL when it applies.
 - **Capture points:** five points, A to E, sit in the neutral zone with sandbag cover (C is in the center, B and D are mirrored, A is nearest Blue and E nearest Red). Standing in the circle captures it (faster with more soldiers, up to 3; contested points freeze). **Win** by holding all five at the same time for 15 seconds. The match lasts **10 minutes**; at the limit the team holding more points wins, then the team with more perk points.
-- **Houses:** each map has six stone houses (three per side, mirrored) with doors and windows. Windows block movement but not bullets or vision, so you can shoot out of them. Grenade and C4 blasts knock down walls and windows.
+- **Houses:** each map has six stone houses (three per side, mirrored), **at most two floors**: about two in three get an upper floor with a staircase along an inside wall and windows all round. Windows block movement but not bullets or vision between knee and head height, so you can shoot out of them, and from upstairs you see and shoot over low cover. Floors and roofs stop bullets (except the stairwell). Grenade and C4 blasts knock down walls and windows on both floors; a soldier who walks out through a hole upstairs drops to the ground. Some bot snipers and defenders climb up to watch a nearby point from an upper window.
 - **Trucks, carts and respawn:** every minute each team's truck crosses its bridge to the base depot and restocks it (walk onto the crates for full health and ammo). It is the **only way back into the fight**: everyone who died since the last truck boards a **transport cart** at the depot. The cart runs every time, even with nobody aboard: it drives to your team's frontmost uncontested point (or stops short of the nearest point if you hold none), the soldiers jump off, and it leaves a **field supply cache** there (4 resupplies, full health and ammo). So supplies reach both the base depot and the front. Carts have 350 HP and can be shot or blown up; if one is destroyed, everyone aboard is lost until the next truck. Press E to jump off your cart early. One bot per team guards its own bridge.
 - **Spectating:** while dead, the camera follows a living teammate. Click (right click goes back), Space or the arrow keys switch between teammates. While riding a cart, the camera follows the cart.
 - **C4:** you start with one charge. Stand on the marked section in the middle of the enemy bridge and hold F for 3 seconds. After a 5 second fuse the bridge is destroyed: that team gets no more trucks, supplies or reinforcements. A team whose bridge is down and whose last soldier dies loses. Red sends its own sappers at your bridge from time to time.
@@ -82,15 +84,17 @@ Points are earned and banked now; perks themselves are not designed yet.
 | File | What it does |
 | --- | --- |
 | `src/config.js` | All tuning values, team colors, biome palettes |
-| `src/mapgen.js` | Procedural symmetric map, collision / line-of-sight / nav grids |
-| `src/nav.js` | A* path finding, line of sight, collision |
+| `src/mapgen.js` | Procedural symmetric map, houses and stairs, heights, collision / line-of-sight / nav grids |
+| `src/nav.js` | A* path finding, 3D line of sight and bullet blocking, collision by height |
 | `src/game.js` | Match state, weapons, bullets, capture logic, trucks, drops, C4, victory |
 | `src/bots.js` | Bot AI: objectives, path following, scanning and shooting, sappers |
-| `src/render-map.js` | Pre-rendered ground, decals, obstacle art |
-| `src/render.js` | Per-frame world rendering, weather, HUD, minimap |
+| `src/render-map.js` | Pre-rendered ground texture, map thumbnail |
+| `src/render3d.js` | First-person 3D view: terrain, obstacles, houses, soldiers, effects, weapon view model |
+| `src/render.js` | HUD, scope overlay, minimap and full map |
+| `src/vendor/three.min.js` | Three.js r160 (MIT) |
 | `src/perks.js` | Perk registry (empty for now) |
 | `src/ui.js` | Menus, commander deployment, input, main loop |
 
 ## Testing helpers
 
-URL parameters: `?biome=desert&seed=42` pick the map, `?autoplay=1` makes your soldier a bot and starts immediately, and `?speed=8` runs the simulation 8× faster, and `?class=sniper` (or `smg`, `lmg`, `rifleman`) forces your own weapon. `window.__game()` returns the live match state in the console.
+URL parameters: `?biome=desert&seed=42` pick the map, `?autoplay=1` makes your soldier a bot and starts immediately (the camera rides along in first person), and `?speed=8` runs the simulation 8× faster, and `?class=sniper` (or `smg`, `lmg`, `rifleman`) forces your own weapon. `window.__game()` returns the live match state in the console.

@@ -23,10 +23,14 @@ window.addEventListener('keydown', e => {
   if (e.code === 'Tab' || e.code === 'Space') e.preventDefault();
   keys.add(e.code);
   if (!G || G.over || G.state !== 'play') return;
-  if (e.code === 'Escape' && G.targeting) G.targeting = false;
+  if (e.code === 'Escape' && G.targeting) { G.targeting = false; if (G.mapForStrike) { G.showMap = false; G.mapForStrike = false; } }
   else if (e.code === 'Escape') togglePause();
   else if (e.code === 'KeyB') {
-    if (canStrike(G.player.team)) { G.targeting = !G.targeting; if (G.targeting) message('Click to mark the air strike target. Right click or Esc cancels', '#e6ad45', 3); }
+    if (canStrike(G.player.team)) {
+      G.targeting = !G.targeting;
+      if (G.targeting) { G.showMap = true; G.mapForStrike = true; unlockPointer(); message('Click the map to mark the air strike target. Right click or Esc cancels', '#e6ad45', 3); }
+      else if (G.mapForStrike) { G.showMap = false; G.mapForStrike = false; }
+    }
     else message(G.strikes.some(s => s.team === G.player.team) ? 'An air strike is already on its way' : `Air strike needs ${CFG.STRIKE_COST} team points (you have ${G.teams[G.player.team].points})`, '#8e9b92', 2);
   }
   else if (e.code === 'KeyR') reloadPressed = true;
@@ -34,36 +38,79 @@ window.addEventListener('keydown', e => {
   else if (e.code === 'KeyE' && G.player.riding) { if (G.online) NET.act({ a: 'dismount' }); else dismount(G.player.riding, G.player); }
   else if (!G.player.alive && (e.code === 'Space' || e.code === 'ArrowRight')) G.specIdx++;
   else if (!G.player.alive && e.code === 'ArrowLeft') G.specIdx--;
-  else if (e.code === 'KeyM') G.showMap = !G.showMap;
+  else if (e.code === 'KeyM') { G.showMap = !G.showMap; G.mapForStrike = false; }
   else if (e.code === 'KeyP') togglePerks();
   else if (e.code === 'KeyN') { const on = SFX.toggle(); message(on ? 'Sound on' : 'Sound muted', '#8e9b92', 1.5); }
   else if (e.code === 'Tab') G.showScores = true;
 });
 window.addEventListener('keyup', e => { keys.delete(e.code); if (e.code === 'Tab' && G) G.showScores = false; });
 window.addEventListener('blur', () => { keys.clear(); mouse.down = false; mouse.right = false; });
-cv.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
-cv.addEventListener('mousedown', e => {
-  if (G && G.targeting && !G.over) {
-    if (e.button === 0) { const w = G.showMap ? mapToWorld(mouse.x, mouse.y) : screenToWorld(e.clientX, e.clientY); if (w) { if (G.online) NET.act({ a: 'strike', x: Math.round(w.x), y: Math.round(w.y) }); else callStrike(G.player.team, w.x, w.y); } }
-    G.targeting = false; return;
+// ---------- first-person mouse look (pointer lock)
+const look = R3.look;
+let wantUnlock = false;
+function lockPointer() { if (document.pointerLockElement !== cv && cv.requestPointerLock) { try { const p = cv.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) { } } }
+function unlockPointer() { if (document.pointerLockElement) { wantUnlock = true; document.exitPointerLock(); } }
+document.addEventListener('pointerlockchange', () => {
+  if (document.pointerLockElement) return;
+  mouse.down = false; mouse.right = false;
+  // Esc while playing releases the mouse: open the menu, unless we released it on purpose (map, perks)
+  if (!wantUnlock && G && !G.over && !G.paused && G.state === 'play' && $('perks').hidden && !G.showMap) togglePause();
+  wantUnlock = false;
+});
+cv.addEventListener('mousemove', e => {
+  mouse.x = e.clientX; mouse.y = e.clientY;
+  if (document.pointerLockElement === cv && G && !G.over) {
+    const k = CFG.SENS / (R3.zoom || 1);
+    look.yaw += e.movementX * k;
+    look.pitch = clamp(look.pitch - e.movementY * k, -1.45, 1.45);
   }
+});
+cv.addEventListener('mousedown', e => {
+  SFX.init();
+  if (G && G.targeting && !G.over) {
+    if (e.button === 0) { const w = mapToWorld(mouse.x, mouse.y); if (w) { if (G.online) NET.act({ a: 'strike', x: Math.round(w.x), y: Math.round(w.y) }); else callStrike(G.player.team, w.x, w.y); } }
+    G.targeting = false; if (G.mapForStrike) { G.showMap = false; G.mapForStrike = false; }
+    if (!G.showMap) lockPointer();
+    return;
+  }
+  if (G && !G.over && !G.paused && !G.showMap && document.pointerLockElement !== cv) { lockPointer(); if (G.player.alive) return; }
   if (G && !G.player.alive && !G.player.riding && !G.over) { G.specIdx += e.button === 2 ? -1 : 1; return; }
-  if (e.button === 0) mouse.down = true; if (e.button === 2) mouse.right = true; SFX.init(); });
+  if (e.button === 0) mouse.down = true; if (e.button === 2) mouse.right = true; });
 window.addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; if (e.button === 2) mouse.right = false; });
 cv.addEventListener('contextmenu', e => e.preventDefault());
 
+// Where the crosshair points: the first thing the view ray hits (terrain or a solid), or a point far ahead.
+function lookTarget(s, maxD) {
+  const m = G.m, ex = s.x, ey = s.y, ez = eyeZ(s);
+  const cp = Math.cos(look.pitch), dx = Math.cos(look.yaw) * cp, dy = Math.sin(look.yaw) * cp, dz = Math.sin(look.pitch);
+  for (let d = 16; d <= maxD; d += 12) {
+    const x = ex + dx * d, y = ey + dy * d, z = ez + dz * d;
+    if (x < 0 || y < 0 || x >= W || y >= H) return { x: clamp(x, 0, W - 1), y: clamp(y, 0, H - 1), d, hit: true };
+    if (blockedAt(m, x, y, z)) return { x, y, d, hit: true };
+  }
+  return { x: ex + dx / (cp || 1) * maxD, y: ey + dy / (cp || 1) * maxD, d: maxD, hit: false };
+}
 function playerControl(s) {
-  let mx = 0, my = 0;
-  if (keys.has('KeyW') || keys.has('ArrowUp')) my -= 1;
-  if (keys.has('KeyS') || keys.has('ArrowDown')) my += 1;
-  if (keys.has('KeyA') || keys.has('ArrowLeft')) mx -= 1;
-  if (keys.has('KeyD') || keys.has('ArrowRight')) mx += 1;
-  const w = screenToWorld(mouse.x, mouse.y);
-  s.angle = Math.atan2(w.y - s.y, w.x - s.x);
+  let f = 0, r = 0;
+  if (keys.has('KeyW') || keys.has('ArrowUp')) f += 1;
+  if (keys.has('KeyS') || keys.has('ArrowDown')) f -= 1;
+  if (keys.has('KeyA') || keys.has('ArrowLeft')) r -= 1;
+  if (keys.has('KeyD') || keys.has('ArrowRight')) r += 1;
+  const yaw = look.yaw, cy = Math.cos(yaw), sy = Math.sin(yaw);
+  // forward along the view, right is 90 degrees clockwise on the map
+  let mx = cy * f - sy * r, my = sy * f + cy * r;
+  s.angle = yaw;
   const scope = (mouse.right || keys.has('KeyQ')) && !!s.cls.scopeRange;
   if (scope) { mx = 0; my = 0; }   // scoping means holding position
-  const ctl = { mx, my, fire: mouse.down && !G.paused, sprint: keys.has('ShiftLeft') || keys.has('ShiftRight'), reload: reloadPressed, interact: keys.has('KeyF'),
-    scope, aimX: w.x, aimY: w.y, throwAt: throwPressed ? { x: w.x, y: w.y } : null };
+  const tgt = lookTarget(s, 1500);
+  const ctl = { mx, my, fire: mouse.down && !G.paused && !G.showMap, sprint: keys.has('ShiftLeft') || keys.has('ShiftRight'), reload: reloadPressed, interact: keys.has('KeyF'),
+    scope, aimX: tgt.x, aimY: tgt.y, pitch: look.pitch, throwAt: null };
+  if (throwPressed) {
+    // throw toward where you look, up to the grenade range (looking up throws as far as possible)
+    const t = lookTarget(s, CFG.GRENADE_RANGE);
+    const d = look.pitch > -0.05 ? CFG.GRENADE_RANGE : Math.min(CFG.GRENADE_RANGE, t.d * Math.cos(look.pitch));
+    ctl.throwAt = { x: s.x + Math.cos(yaw) * d, y: s.y + Math.sin(yaw) * d };
+  }
   reloadPressed = false; throwPressed = false;
   return ctl;
 }
@@ -223,6 +270,8 @@ function beginMatch(auto = false) {
   startMatch(m, art, menu.counts, menu.playerSpot, { skill: menu.skill, auto, playerClass: params.get('class'), loadout: menu.loadout.slice() });
   show(null);
   cv.classList.add('playing');
+  look.yaw = G.player.angle; look.pitch = 0;
+  lockPointer();
 }
 
 // ---------- pause / perks / respawn / end
@@ -234,17 +283,18 @@ function togglePause() {
   $('quit').textContent = G.online ? 'Leave match' : 'Quit to menu';
   $('pause').hidden = !G.paused;
   cv.classList.toggle('playing', !G.paused);
+  if (G.paused) unlockPointer();
 }
-$('resume').onclick = togglePause;
+$('resume').onclick = () => { togglePause(); lockPointer(); };
 $('quit').onclick = () => { if (G && G.online) { $('pause').hidden = true; NET.leave(); return; } G = null; $('respawn').hidden = true; cv.classList.remove('playing'); show('menu'); };
 
 function togglePerks() {
   const open = $('perks').hidden;
   $('perks').hidden = !open;
   cv.classList.toggle('playing', !open);
-  if (open) renderPerks();
+  if (open) { unlockPointer(); renderPerks(); }
 }
-$('closePerks').onclick = togglePerks;
+$('closePerks').onclick = () => { togglePerks(); lockPointer(); };
 function renderPerks() {
   const P = G.player;
   $('perkTeam').textContent = G.teams[P.team].points;
@@ -290,6 +340,7 @@ function updateRespawnDock() {
 
 function onMatchEnd() {
   cv.classList.remove('playing');
+  unlockPointer();
   $('respawn').hidden = true;
   const P = G.player, w = G.winner;
   $('rematch').textContent = 'Rematch on this map'; $('toMenu').textContent = 'Main menu';
@@ -319,6 +370,11 @@ function frame(now) {
     let n = 0;
     while (acc >= STEP && n < SPEED * 6 + 2) { update(STEP); acc -= STEP; n++; if (G.over) break; }
     if (acc > STEP * 10) acc = 0;
+  }
+  if (G && G.player) {
+    const P = G.player;
+    if (P.alive && !G.wasAlive) { look.yaw = P.angle; look.pitch = 0; }
+    G.wasAlive = P.alive;
   }
   try { render(dt); } catch (e) { console.error(e); }
   if (G) updateRespawnDock();

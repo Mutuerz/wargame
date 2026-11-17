@@ -35,7 +35,7 @@ shoot = function (s, moving) {
   const n = G.bullets.length;
   _shoot(s, moving);
   const b = G.bullets[n];
-  if (b) emit('a', ['b', r1(b.x), r1(b.y), Math.round(b.vx), Math.round(b.vy), r2(b.life), b.team, b.sniper ? 1 : 0, s.id]);
+  if (b) emit('a', ['b', r1(b.x), r1(b.y), Math.round(b.vx), Math.round(b.vy), r2(b.life), b.team, b.sniper ? 1 : 0, s.id, r1(b.z), Math.round(b.vz)]);
 };
 const _damage = damage;
 damage = function (target, amount, attacker) {
@@ -63,7 +63,7 @@ function playerControl(s) {
   const h = s.human;
   let inp = h.queue.shift();
   if (inp) { h.ack = inp.seq; h.last = inp; } else inp = h.last;
-  const ctl = inp ? { mx: inp.mx, my: inp.my, fire: inp.fire, sprint: inp.sprint, interact: inp.interact, scope: inp.scope, aimX: inp.ax, aimY: inp.ay }
+  const ctl = inp ? { mx: inp.mx, my: inp.my, fire: inp.fire, sprint: inp.sprint, interact: inp.interact, scope: inp.scope, aimX: inp.ax, aimY: inp.ay, pitch: inp.pitch }
     : { mx: 0, my: 0, aimX: s.x + Math.cos(s.angle) * 100, aimY: s.y + Math.sin(s.angle) * 100 };
   if (inp) s.angle = Math.atan2(inp.ay - s.y, inp.ax - s.x);
   if (ctl.scope && s.cls.scopeRange) { ctl.mx = 0; ctl.my = 0; }
@@ -122,7 +122,7 @@ const SIM = {
     const f = n(a[4]) | 0;
     const q = s.human.queue;
     q.push({ seq: n(a[1]), mx: clamp(n(a[2]), -1, 1), my: clamp(n(a[3]), -1, 1), fire: !!(f & 1), sprint: !!(f & 2), interact: !!(f & 4), scope: !!(f & 8),
-      ax: clamp(n(a[5]), -500, W + 500), ay: clamp(n(a[6]), -500, H + 500) });
+      ax: clamp(n(a[5]), -500, W + 500), ay: clamp(n(a[6]), -500, H + 500), pitch: clamp(n(a[7]) / 1000, -1.4, 1.4) });
     if (q.length > 8) q.splice(0, q.length - 8);
   },
   act(id, a) {
@@ -148,12 +148,12 @@ const SIM = {
     const sol = [];
     for (const s of G.soldiers) {
       if (!s.alive) continue;
-      if (s.team !== T && !(isVisible(T, s.x, s.y) || G.time - s.spotted[T] < 1.6)) continue;
+      if (s.team !== T && !(soldierVisible(T, s) || G.time - s.spotted[T] < 1.6)) continue;
       let f = 0;
       if (s.reloading) f |= 1; if (s.scoped) f |= 2; if (s.shield > 0) f |= 4;
       if (s.c4 > 0 && s.bot && s.bot.role === 'sapper') f |= 8; if (s.act) f |= 16;
       if (s.team !== T && G.time - s.spotted[T] < 1.6) f |= 32;
-      sol.push([s.id, r1(s.x), r1(s.y), r2(s.angle), Math.ceil(s.hp), f, s.reloading ? r2(1 - s.reloadT / s.reloadMax) : 0, s.act ? r2(s.actT / CFG.C4_PLANT) : 0]);
+      sol.push([s.id, r1(s.x), r1(s.y), r2(s.angle), Math.ceil(s.hp), f, s.reloading ? r2(1 - s.reloadT / s.reloadMax) : 0, s.act ? r2(s.actT / CFG.C4_PLANT) : 0, r1(s.z), r2(s.pitch)]);
     }
     return {
       time: r2(G.time),
@@ -163,7 +163,7 @@ const SIM = {
       lock: [G.lock.team, r2(G.lock.t)],
       trk: G.trucks.map(t => [nid(t), t.team, r1(t.x), r1(t.y), t.dir, t.state]),
       carts: G.carts.map(c => [nid(c), c.team, r1(c.x), r1(c.y), r2(c.angle), Math.ceil(c.hp), c.riders.length, c.target.name]),
-      gr: G.grenades.map(g => [nid(g), r1(g.x), r1(g.y), r2(g.fuse), g.team, r2(g.spin)]),
+      gr: G.grenades.map(g => [nid(g), r1(g.x), r1(g.y), r2(g.fuse), g.team, r2(g.spin), r1(g.z)]),
       c4: G.c4s.map(c => [r1(c.x), r1(c.y), r2(c.fuse), c.bridge, c.team, r2(c.beep)]),
       drops: G.drops.map(d => [nid(d), r1(d.x), r1(d.y), r2(d.fall), d.c4 ? 1 : 0]),
       caches: G.caches.map(c => [c.team, r1(c.x), r1(c.y), c.charges, c.depot ? 1 : 0]),
@@ -174,7 +174,7 @@ const SIM = {
     const s = this.get(id); if (!s) return null;
     return { id: s.id, alive: s.alive, hp: Math.ceil(s.hp), mag: s.mag, mags: s.mags.slice(), nades: s.nades, c4: s.c4,
       rl: s.reloading ? 1 : 0, rlT: r2(s.reloadT), rlM: r2(s.reloadMax), act: s.act, actT: r2(s.actT), pts: s.points,
-      ride: s.riding ? nid(s.riding) : 0, x: r1(s.x), y: r1(s.y), vx: r1(s.vx), vy: r1(s.vy), cls: s.cls.key,
+      ride: s.riding ? nid(s.riding) : 0, x: r1(s.x), y: r1(s.y), z: r1(s.z), vx: r1(s.vx), vy: r1(s.vy), cls: s.cls.key,
       ack: s.human ? s.human.ack : 0, sh: r2(Math.max(0, s.shield)), sc: s.scoped ? 1 : 0, team: s.team };
   },
   takeEvents() { const e = NET.ev; NET.ev = []; return e; },
