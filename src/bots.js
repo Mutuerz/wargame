@@ -18,24 +18,15 @@ function resetBrain(s) {
   if (b.role === 'sapper' && s.c4 <= 0) b.role = null;
 }
 
-function botSpawnChoice(s) {
-  const opts = spawnOptions(s.team).filter(o => o.type === 'point');
-  if (opts.length && Math.random() < 0.5) {
-    // closest owned point to the front
-    const ex = s.team === 0 ? W : 0;
-    opts.sort((a, b) => Math.abs(a.x - ex) - Math.abs(b.x - ex));
-    return opts[0];
-  }
-  return { type: 'base', idx: s.spot };
-}
-
 function scan(s) {
   const b = s.bot, sk = G.skill;
-  let best = null, bd = sk.range * sk.range;
+  const near = Math.min(sk.range, visionRange(s)), far = s.scoped ? s.cls.scopeRange : 0;
+  let best = null, bd = Math.max(near, far) ** 2;
   for (const e of G.soldiers) {
     if (!e.alive || e.team === s.team) continue;
     const d = dist2(s.x, s.y, e.x, e.y);
     if (d >= bd) continue;
+    if (d > near * near && Math.abs(angDiff(s.angle, Math.atan2(e.y - s.y, e.x - s.x))) > s.cls.scopeCone) continue;
     if (!losClear(G.m, s.x, s.y, e.x, e.y)) continue;
     bd = d; best = e;
   }
@@ -64,8 +55,8 @@ function chooseObjective(s) {
   }
   // 3. supplies
   const ammo = ammoTotal(s), hpMax = maxHp(s);
-  const need = ammo < 30 || s.hp < hpMax * 0.5;
-  const want = ammo < CFG.MAG * (CFG.EXTRA_MAGS + 1) - 10 || s.hp < hpMax * 0.85;
+  const need = ammo < Math.min(30, s.cls.mag * 1.2) || s.hp < hpMax * 0.5;
+  const want = ammo < ammoFull(s) - 10 || s.hp < hpMax * 0.85;
   let tgt = null, td = Infinity;
   for (const c of G.caches) if (c.team === t) { const d = dist(s.x, s.y, c.x, c.y); if (d < td) { td = d; tgt = c; } }
   for (const d of G.drops) if (d.fall <= 0) { const dd = dist(s.x, s.y, d.x, d.y); if (dd < td) { td = dd; tgt = d; } }
@@ -111,7 +102,9 @@ function followPath(s, tx, ty, dt) {
 
 function botThink(s, dt) {
   const b = s.bot, sk = G.skill, m = G.m;
-  const ctl = { mx: 0, my: 0, fire: false, sprint: false, reload: false, interact: false };
+  const ctl = { mx: 0, my: 0, fire: false, sprint: false, reload: false, interact: false, scope: false, aimX: s.x + Math.cos(s.angle) * 300, aimY: s.y + Math.sin(s.angle) * 300 };
+  const sniper = s.cls === CLASSES.sniper;
+  b.nadeCD = (b.nadeCD || 0) - dt;
 
   b.scanT -= dt;
   if (b.scanT <= 0) { b.scanT = 0.18 + Math.random() * 0.08; scan(s); }
@@ -131,15 +124,23 @@ function botThink(s, dt) {
   let moveX = 0, moveY = 0;
   if (e) {
     const dx = e.x - s.x, dy = e.y - s.y, d = Math.hypot(dx, dy) || 1;
-    const lead = d / CFG.BULLET_SPEED;
+    const lead = d / s.cls.bulletSpeed;
+    ctl.aimX = e.x; ctl.aimY = e.y;
     const want = Math.atan2(e.y + e.vy * lead - s.y, e.x + e.vx * lead - s.x) + b.aimErr * Math.sin(G.time * 2.1 + s.id);
     s.angle = turnTo(s.angle, want, sk.turn * dt);
     b.aimErr = Math.max(sk.minErr, b.aimErr - dt * 0.16);
     b.react -= dt;
-    if (b.vis && b.react <= 0 && Math.abs(angDiff(s.angle, want)) < 0.1 && d < CFG.BULLET_RANGE * 0.95 && s.mag > 0 && !s.reloading) {
-      b.burst -= dt;
-      if (b.burst > 0) ctl.fire = true;
-      else if (b.burst < -b.pause) { b.burst = rand(0.35, 0.9); b.pause = rand(0.15, 0.4); }
+    if (b.vis && b.react <= 0 && Math.abs(angDiff(s.angle, want)) < 0.1 && d < s.cls.range * 0.95 && s.mag > 0 && !s.reloading) {
+      if (sniper) ctl.fire = Math.abs(angDiff(s.angle, want)) < 0.04;
+      else {
+        b.burst -= dt;
+        if (b.burst > 0) ctl.fire = true;
+        else if (b.burst < -b.pause) { b.burst = rand(0.35, 0.9); b.pause = rand(0.15, 0.4); }
+      }
+    }
+    // grenade: enemy in throwing range, especially when hiding behind cover
+    if (s.nades > 0 && b.nadeCD <= 0 && d > 140 && d < CFG.GRENADE_RANGE && (!b.vis || Math.random() < 0.01)) {
+      ctl.throwAt = { x: e.x + e.vx * 1.5, y: e.y + e.vy * 1.5 }; b.nadeCD = 6;
     }
     if (s.mag === 0) ctl.reload = true;
     // strafe
@@ -151,6 +152,8 @@ function botThink(s, dt) {
       const [fx, fy] = followPath(s, e.x, e.y, dt);
       moveX = moveX * 0.3 + fx; moveY = moveY * 0.3 + fy;
     } else if (d < 220) { moveX -= dx / d * 0.5; moveY -= dy / d * 0.5; }
+    // snipers hold still and scope in at range
+    if (sniper && b.vis && d > 450) { moveX = 0; moveY = 0; ctl.scope = true; }
     // sappers and defusers keep pushing to their goal while fighting
     if (b.obj && (b.obj.type === 'plant' || b.obj.type === 'defuse') && d > 300) {
       const [fx, fy] = followPath(s, b.obj.x, b.obj.y, dt);
@@ -170,6 +173,7 @@ function botThink(s, dt) {
       s.angle = turnTo(s.angle, b.sweepA, 2.5 * dt);
     }
     ctl.sprint = dGoal > 500 && s.hp > 30;
+    if (sniper && !moving) ctl.scope = true;   // overwatch
     if (s.mag < 15 && !s.reloading) ctl.reload = true;
     if ((o.type === 'plant' || o.type === 'defuse') && dGoal < 40) { moveX = 0; moveY = 0; ctl.interact = true; ctl.sprint = false; }
     if (o.type === 'supply' && dGoal < 30) b.objT = Math.min(b.objT, 0.5);
@@ -185,6 +189,12 @@ function botThink(s, dt) {
       if (b.stuck > 3) { b.objT = 0; b.stuck = 0; b.obj = null; }
     } else if (moved > 30) b.stuck = 0;
     b.stuckClock = 0; b.lx = s.x; b.ly = s.y;
+  }
+  // run from live grenades
+  for (const g of G.grenades) {
+    if (g.team === s.team) continue;
+    const dx = s.x - g.x, dy = s.y - g.y, d = Math.hypot(dx, dy) || 1;
+    if (d < CFG.GRENADE_RADIUS + 40 && g.fuse < 3.5) { moveX = dx / d; moveY = dy / d; ctl.sprint = true; ctl.scope = false; ctl.interact = false; }
   }
   if (b.nudgeT > 0) { b.nudgeT -= dt; moveX = Math.cos(b.nudgeA); moveY = Math.sin(b.nudgeA); }
 

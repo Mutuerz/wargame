@@ -36,6 +36,8 @@ function renderGround(m) {
   }
   g.globalAlpha = 1;
 
+  g.drawImage(renderRelief(m), 0, 0, W, H);
+
   // biome ground detail
   g.lineCap = 'round';
   if (m.biome === 'forest' || m.biome === 'swamp') {
@@ -310,4 +312,35 @@ function drawSolid(c, o, B) {
   } else {
     c.fillStyle = '#555'; if (o.t === 'c') circle(c, o.x, o.y, o.r); else c.fillRect(o.x, o.y, o.w, o.h);
   }
+}
+
+// Hill shading and contour lines from the height map (one pixel = 5 world px).
+function renderRelief(m) {
+  const S = 5, w = W / S, h = H / S;
+  const c = makeCanvas(w, h), g = c.getContext('2d');
+  const img = g.createImageData(w, h), d = img.data;
+  const hs = new Float32Array(w * h);
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) hs[j * w + i] = heightAt(m, i * S + S / 2, j * S + S / 2);
+  // box blur (3 passes) so bilinear facets don't show up as stair steps in the shading
+  const tmp = new Float32Array(w * h), R = 3;
+  for (let pass = 0; pass < 3; pass++) {
+    for (let j = 0; j < h; j++) { let acc = 0; for (let i = -R; i <= R; i++) acc += hs[j * w + clamp(i, 0, w - 1)];
+      for (let i = 0; i < w; i++) { tmp[j * w + i] = acc / (2 * R + 1); acc += hs[j * w + Math.min(w - 1, i + R + 1)] - hs[j * w + Math.max(0, i - R)]; } }
+    for (let i = 0; i < w; i++) { let acc = 0; for (let j = -R; j <= R; j++) acc += tmp[clamp(j, 0, h - 1) * w + i];
+      for (let j = 0; j < h; j++) { hs[j * w + i] = acc / (2 * R + 1); acc += tmp[Math.min(h - 1, j + R + 1) * w + i] - tmp[Math.max(0, j - R) * w + i]; } }
+  }
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    const k = j * w + i, v = hs[k];
+    const l = hs[j * w + Math.max(0, i - 1)], r = hs[j * w + Math.min(w - 1, i + 1)];
+    const u = hs[Math.max(0, j - 1) * w + i], dn = hs[Math.min(h - 1, j + 1) * w + i];
+    const shade = ((l - r) + (u - dn)) * 14;          // light from the north-west
+    let R = 0, Gc = 0, B = 0, A = 0;
+    if (shade > 0) { R = Gc = B = 255; A = Math.min(0.32, shade * 0.5); }
+    else { A = Math.min(0.4, -shade * 0.6); }
+    const lvl = Math.floor(v * 2), lr = Math.floor(r * 2), ld = Math.floor(dn * 2);
+    if (lvl !== lr || lvl !== ld) { R = Gc = B = 20; A = 0.28; }
+    d[k * 4] = R; d[k * 4 + 1] = Gc; d[k * 4 + 2] = B; d[k * 4 + 3] = Math.round(A * 255);
+  }
+  g.putImageData(img, 0, 0);
+  return c;
 }

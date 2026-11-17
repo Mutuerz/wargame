@@ -218,6 +218,7 @@ function tryGenerate(bk, seed, density) {
     depots: [depot, rotPt(depot)],
     spawns: [spawns, spawns.map(rotPt)],
     points: points.map(p => Object.assign(p, { owner: -1, prog: 0, c0: 0, c1: 0 })),
+    height: buildHeight(R),
     truckLanes: [{ y: by, from: -110, to: depot.x - 70, dir: 1 }, { y: H - by, from: W + 110, to: W - depot.x + 70, dir: -1 }],
   };
 }
@@ -293,4 +294,33 @@ function checkConnectivity(m) {
   const targets = [...m.spawns[0], ...m.spawns[1], ...m.points, ...m.depots,
     { x: m.bridges[0].cx, y: m.bridges[0].cy }, { x: m.bridges[1].cx, y: m.bridges[1].cy }];
   return targets.every(t => { const n = nearestNav(m, t.x, t.y); return n >= 0 && seen[n]; });
+}
+
+// Terrain height (0..HEIGHT_MAX levels) on the fine grid, point-symmetric like the rest of the map.
+function buildHeight(R) {
+  const hills = [];
+  const n = 9 + Math.floor(R() * 5);
+  for (let i = 0; i < n; i++) {
+    const ridge = R() < 0.35;
+    hills.push({ x: 700 + R() * (W / 2 - 700), y: R() * H, r: 260 + R() * 520, h: 0.8 + R() * 1.6, sx: ridge ? 2.2 : 1, a: R() * Math.PI });
+  }
+  const all = hills.concat(hills.map(h => Object.assign({}, h, { x: W - h.x, y: H - h.y })));
+  const hm = new Float32Array(GW * GH);
+  for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) {
+    const x = i * CELL + CELL / 2, y = j * CELL + CELL / 2;
+    let v = 0;
+    for (const h of all) {
+      const dx = x - h.x, dy = y - h.y, c = Math.cos(h.a), s = Math.sin(h.a);
+      const u = (dx * c + dy * s) / (h.r * h.sx), w = (-dx * s + dy * c) / h.r;
+      v += h.h * Math.exp(-(u * u + w * w) * 1.6);
+    }
+    hm[j * GW + i] = Math.min(CFG.HEIGHT_MAX, v);
+  }
+  return hm;
+}
+function heightAt(m, x, y) {
+  const fx = clamp(x / CELL - 0.5, 0, GW - 1.001), fy = clamp(y / CELL - 0.5, 0, GH - 1.001);
+  const i = fx | 0, j = fy | 0, tx = fx - i, ty = fy - j, hm = m.height;
+  const a = hm[j * GW + i], b = hm[j * GW + i + 1], c = hm[(j + 1) * GW + i], d = hm[(j + 1) * GW + i + 1];
+  return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
 }

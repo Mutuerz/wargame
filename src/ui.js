@@ -4,7 +4,8 @@
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 const keys = new Set();
-const mouse = { x: 0, y: 0, down: false };
+const mouse = { x: 0, y: 0, down: false, right: false };
+let throwPressed = false;
 let reloadPressed = false;
 let SPEED = Math.max(1, Math.min(16, Number(params.get('speed')) || 1));
 
@@ -24,16 +25,17 @@ window.addEventListener('keydown', e => {
   if (!G || G.over || G.state !== 'play') return;
   if (e.code === 'Escape') togglePause();
   else if (e.code === 'KeyR') reloadPressed = true;
+  else if (e.code === 'KeyG') throwPressed = true;
   else if (e.code === 'KeyM') G.showMap = !G.showMap;
   else if (e.code === 'KeyP') togglePerks();
   else if (e.code === 'KeyN') { const on = SFX.toggle(); message(on ? 'Sound on' : 'Sound muted', '#8e9b92', 1.5); }
   else if (e.code === 'Tab') G.showScores = true;
 });
 window.addEventListener('keyup', e => { keys.delete(e.code); if (e.code === 'Tab' && G) G.showScores = false; });
-window.addEventListener('blur', () => { keys.clear(); mouse.down = false; });
+window.addEventListener('blur', () => { keys.clear(); mouse.down = false; mouse.right = false; });
 cv.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
-cv.addEventListener('mousedown', e => { if (e.button === 0) mouse.down = true; SFX.init(); });
-window.addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; });
+cv.addEventListener('mousedown', e => { if (e.button === 0) mouse.down = true; if (e.button === 2) mouse.right = true; SFX.init(); });
+window.addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; if (e.button === 2) mouse.right = false; });
 cv.addEventListener('contextmenu', e => e.preventDefault());
 
 function playerControl(s) {
@@ -44,8 +46,11 @@ function playerControl(s) {
   if (keys.has('KeyD') || keys.has('ArrowRight')) mx += 1;
   const w = screenToWorld(mouse.x, mouse.y);
   s.angle = Math.atan2(w.y - s.y, w.x - s.x);
-  const ctl = { mx, my, fire: mouse.down && !G.paused, sprint: keys.has('ShiftLeft') || keys.has('ShiftRight'), reload: reloadPressed, interact: keys.has('KeyF') };
-  reloadPressed = false;
+  const scope = (mouse.right || keys.has('KeyQ')) && !!s.cls.scopeRange;
+  if (scope) { mx = 0; my = 0; }   // scoping means holding position
+  const ctl = { mx, my, fire: mouse.down && !G.paused, sprint: keys.has('ShiftLeft') || keys.has('ShiftRight'), reload: reloadPressed, interact: keys.has('KeyF'),
+    scope, aimX: w.x, aimY: w.y, throwAt: throwPressed ? { x: w.x, y: w.y } : null };
+  reloadPressed = false; throwPressed = false;
   return ctl;
 }
 
@@ -182,7 +187,7 @@ function beginMatch(auto = false) {
   // fresh map instance so bridges and decals reset
   const m = generateMap(menu.biome, menu.seed);
   const art = buildArt(m);
-  startMatch(m, art, menu.counts, menu.playerSpot, { skill: menu.skill, auto });
+  startMatch(m, art, menu.counts, menu.playerSpot, { skill: menu.skill, auto, playerClass: params.get('class') });
   show(null);
   cv.classList.add('playing');
 }
@@ -228,26 +233,21 @@ function renderPerks() {
   }
 }
 
-let respawnSig = '';
 function updateRespawnDock() {
   const P = G && G.player;
-  if (!G || G.over || P.alive || G.auto) { $('respawn').hidden = true; respawnSig = ''; return; }
+  if (!G || G.over || P.alive || G.auto) { $('respawn').hidden = true; return; }
   $('respawn').hidden = false;
-  $('respawnText').textContent = `You were killed. Redeploying in ${Math.max(0, P.respawnT).toFixed(1)} s. Choose where:`;
-  const opts = spawnOptions(P.team);
-  const ch = G.respawnChoice;
-  if (!opts.some(o => o.type === ch.type && o.idx === ch.idx)) G.respawnChoice = { type: 'base', idx: P.spot };
-  const sig = opts.map(o => o.type + o.idx).join(',') + '|' + G.respawnChoice.type + G.respawnChoice.idx;
-  if (sig === respawnSig) return;
-  respawnSig = sig;
-  const wrap = $('respawnOpts'); wrap.innerHTML = '';
-  for (const o of opts) {
-    const b = document.createElement('button');
-    b.textContent = o.label;
-    b.className = (o.type === G.respawnChoice.type && o.idx === G.respawnChoice.idx) ? 'on' : '';
-    b.onclick = () => { G.respawnChoice = { type: o.type, idx: o.idx }; };
-    wrap.appendChild(b);
+  const t = P.team, tm = G.teams[t];
+  const truck = G.trucks.find(k => k.team === t && k.state === 'in');
+  let msg;
+  if (G.m.bridges[t].destroyed) msg = 'You were killed. Our bridge is down, so no more reinforcements can arrive.';
+  else if (truck) msg = 'You were killed. Your truck is crossing the bridge now.';
+  else {
+    const lane = G.m.truckLanes[t];
+    const eta = tm.supplyT + Math.abs(lane.to - lane.from) / CFG.TRUCK_SPEED;
+    msg = `You were killed. You return with the next truck in ${eta.toFixed(0)} s.`;
   }
+  $('respawnText').textContent = msg;
 }
 
 function onMatchEnd() {

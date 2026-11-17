@@ -8,7 +8,8 @@ function makeSoldier(team, idx, isPlayer) {
     id: team * 100 + idx, team, idx, isPlayer, name: CALLSIGNS[team][idx] || (TEAMS[team].name + '-' + (idx + 1)),
     x: 0, y: 0, vx: 0, vy: 0, angle: team === 0 ? 0 : Math.PI,
     hp: CFG.HP, alive: false, respawnT: 0, shield: 0,
-    mag: CFG.MAG, mags: [], reloading: false, reloadT: 0, reloadMax: 1, fireCD: 0, heat: 0,
+    cls: CLASSES.rifleman, nades: 0, scoped: false, aimX: 0, aimY: 0,
+    mag: 25, mags: [], reloading: false, reloadT: 0, reloadMax: 1, fireCD: 0, heat: 0,
     c4: 0, act: null, actT: 0, cacheCD: 0,
     spot: 0, kills: 0, deaths: 0, points: 0, perks: [], mods: { speed: 1, reload: 1, dmg: 1, maxHp: 1, spread: 1 },
     spotted: [0, 0], lastHitBy: null, lastHitT: -99, walkPhase: 0,
@@ -17,6 +18,9 @@ function makeSoldier(team, idx, isPlayer) {
 }
 function maxHp(s) { return CFG.HP * s.mods.maxHp; }
 function ammoTotal(s) { return s.mag + s.mags.reduce((a, b) => a + b, 0); }
+function ammoFull(s) { return s.cls.mag * (s.cls.mags + 1); }
+function refillAmmo(s) { s.mag = s.cls.mag; s.mags = Array(s.cls.mags).fill(s.cls.mag); s.reloading = false; }
+function visionRange(s) { return s.cls.vision; }
 
 // Bot commander: picks a deployment pattern automatically.
 function botCommanderCounts() {
@@ -32,11 +36,11 @@ function startMatch(m, art, counts, playerSpot, opts = {}) {
     skill: SKILLS[opts.skill ?? 1], auto: !!opts.auto,
     soldiers: [], bullets: [], particles: [], drops: [], caches: [], c4s: [], trucks: [], feed: [], msg: null,
     teams: [
-      { points: 0, supplyT: CFG.SUPPLY_INTERVAL, sapperT: 100 + Math.random() * 40, counts: counts.slice() },
-      { points: 0, supplyT: CFG.SUPPLY_INTERVAL, sapperT: 100 + Math.random() * 40, counts: botCommanderCounts() },
+      { points: 0, supplyT: CFG.SUPPLY_INTERVAL, sapperT: 100 + Math.random() * 40, counts: counts.slice(), vis: new Uint8Array(GW * GH) },
+      { points: 0, supplyT: CFG.SUPPLY_INTERVAL, sapperT: 100 + Math.random() * 40, counts: botCommanderCounts(), vis: new Uint8Array(GW * GH) },
     ],
     lock: { team: -1, t: 0 }, holdT: 0, dropT: CFG.DROP_INTERVAL, pathBudget: 0, cam: { x: 0, y: 0, shake: 0 }, hurtT: 0, hitT: 0,
-    respawnChoice: { type: 'base', idx: playerSpot }, smokers: [],
+    grenades: [], visT: 0, smokers: [],
     stats: { captures: [0, 0], bridges: [false, false] },
   };
   for (let t = 0; t < 2; t++) {
@@ -46,8 +50,11 @@ function startMatch(m, art, counts, playerSpot, opts = {}) {
       const pi = list.indexOf(playerSpot); if (pi >= 0) list.splice(pi, 1);
       list.unshift(playerSpot);
     }
+    const snipers = new Set();
+    while (snipers.size < CFG.SNIPERS_PER_TEAM) snipers.add(Math.floor(Math.random() * CFG.TEAM_SIZE));
     for (let i = 0; i < CFG.TEAM_SIZE; i++) {
       const s = makeSoldier(t, i, t === 0 && i === 0);
+      if (snipers.has(i) || (t === 0 && i === 0 && opts.playerClass === 'sniper')) s.cls = CLASSES.sniper;
       s.spot = list[i] ?? (i % 5);
       G.soldiers.push(s);
       spawnSoldier(s, { type: 'base', idx: s.spot });
@@ -66,25 +73,17 @@ function startMatch(m, art, counts, playerSpot, opts = {}) {
   message('Capture A, B and C at the same time to win', '#e6ad45', 5);
 }
 
-function spawnOptions(team) {
-  const opts = G.m.spawns[team].map((s, i) => ({ type: 'base', idx: i, label: 'Base ' + s.name, x: s.x, y: s.y }));
-  G.m.points.forEach((p, i) => {
-    const enemy = team === 0 ? p.c1 : p.c0;
-    if (p.owner === team && enemy === 0) opts.push({ type: 'point', idx: i, label: 'Point ' + p.name, x: p.x, y: p.y });
-  });
-  return opts;
-}
-
 function spawnSoldier(s, choice) {
   const m = G.m;
   let base;
-  if (choice.type === 'point' && m.points[choice.idx] && m.points[choice.idx].owner === s.team) base = m.points[choice.idx];
+  if (choice.type === 'depot') base = m.depots[s.team];
   else base = m.spawns[s.team][choice.idx ?? s.spot] || m.spawns[s.team][0];
-  const p = randomFreeNear(m, base.x, base.y, choice.type === 'point' ? 90 : 55);
+  const p = randomFreeNear(m, base.x + (choice.type === 'depot' ? (s.team === 0 ? 110 : -110) : 0), base.y, choice.type === 'depot' ? 80 : 55);
   s.x = p.x; s.y = p.y; s.vx = s.vy = 0;
   Perks.reapply(G, s);
   s.hp = maxHp(s); s.alive = true; s.shield = CFG.SPAWN_SHIELD;
-  s.mag = CFG.MAG; s.mags = Array(CFG.EXTRA_MAGS).fill(CFG.MAG); s.reloading = false; s.fireCD = 0; s.heat = 0;
+  refillAmmo(s); s.fireCD = 0; s.heat = 0; s.scoped = false;
+  s.nades = Math.random() < CFG.GRENADE_CHANCE ? 1 : 0;
   s.act = null; s.actT = 0;
   s.angle = s.team === 0 ? 0 : Math.PI;
   if (s.bot) resetBrain(s);
@@ -95,9 +94,9 @@ function feed(text, color) { G.feed.unshift({ text, color, t: 7 }); if (G.feed.l
 
 // ---------------- Weapons
 function startReload(s) {
-  if (s.reloading || s.mag >= CFG.MAG || !s.mags.some(x => x > 0)) return false;
-  s.reloading = true;
-  s.reloadT = s.reloadMax = (s.mag > 0 ? CFG.RELOAD : CFG.RELOAD_EMPTY) * s.mods.reload;
+  if (s.reloading || s.mag >= s.cls.mag || !s.mags.some(x => x > 0)) return false;
+  s.reloading = true; s.scoped = false;
+  s.reloadT = s.reloadMax = (s.mag > 0 ? s.cls.reload : s.cls.reloadEmpty) * s.mods.reload;
   if (s.isPlayer) SFX.reload();
   return true;
 }
@@ -109,15 +108,28 @@ function finishReload(s) {
   s.mags = s.mags.filter(x => x > 0);
 }
 function shoot(s, moving) {
-  const spread = (moving ? CFG.SPREAD_MOVING : CFG.SPREAD) * s.mods.spread + s.heat;
+  const spread = currentSpread(s, moving);
   const a = s.angle + (Math.random() - 0.5) * 2 * spread;
   const mx = s.x + Math.cos(s.angle) * 26, my = s.y + Math.sin(s.angle) * 26;
-  G.bullets.push({ x: mx, y: my, px: mx, py: my, vx: Math.cos(a) * CFG.BULLET_SPEED, vy: Math.sin(a) * CFG.BULLET_SPEED,
-    life: CFG.BULLET_RANGE / CFG.BULLET_SPEED, team: s.team, owner: s, dmg: CFG.DMG * s.mods.dmg });
-  s.mag--; s.fireCD = 1 / CFG.FIRE_RATE; s.heat = Math.min(0.05, s.heat + 0.008);
+  G.bullets.push({ x: mx, y: my, px: mx, py: my, vx: Math.cos(a) * s.cls.bulletSpeed, vy: Math.sin(a) * s.cls.bulletSpeed,
+    life: s.cls.range / s.cls.bulletSpeed, team: s.team, owner: s, dmg: s.cls.dmg * s.mods.dmg, sniper: s.cls === CLASSES.sniper });
+  s.mag--; s.fireCD = 1 / s.cls.rate; s.heat = Math.min(0.05, s.heat + (s.cls.auto ? 0.008 : 0.03));
   G.particles.push({ type: 'flash', x: mx, y: my, a: s.angle, life: 0.05, max: 0.05 });
   if (Math.random() < 0.5) stampCasing(G.art, s.x + Math.cos(s.angle + 1.6) * 16, s.y + Math.sin(s.angle + 1.6) * 16);
   SFX.shot(s.x, s.y, s.isPlayer);
+}
+
+// Terrain: shooting downhill tightens spread, uphill widens it.
+function slopeFactor(s) {
+  const d = heightAt(G.m, s.x, s.y) - heightAt(G.m, s.aimX, s.aimY);
+  if (d > CFG.HEIGHT_STEP) return 1 / CFG.DOWNHILL_ACC;
+  if (d < -CFG.HEIGHT_STEP) return CFG.UPHILL_PEN;
+  return 1;
+}
+function currentSpread(s, moving) {
+  let sp = (moving ? s.cls.spreadMove : s.cls.spread) * s.mods.spread + s.heat;
+  if (s.scoped) sp *= s.cls.scopeSpread;
+  return sp * slopeFactor(s);
 }
 
 function damage(target, amount, attacker) {
@@ -132,14 +144,13 @@ function damage(target, amount, attacker) {
 }
 
 function kill(s, killer) {
-  s.alive = false; s.hp = 0; s.respawnT = CFG.RESPAWN; s.deaths++;
-  s.reloading = false; s.act = null;
+  s.alive = false; s.hp = 0; s.deaths++;
+  s.reloading = false; s.act = null; s.scoped = false;
   stampBody(G.art, s);
   if (killer && killer !== s) { killer.kills++; }
   const kn = killer ? killer.name : 'Explosion';
   const kc = killer ? TEAMS[killer.team].color : '#e6ad45';
   feed(`${kn}  ✕  ${s.name}`, kc);
-  if (s.isPlayer) G.respawnChoice = G.respawnChoice || { type: 'base', idx: s.spot };
   s.c4 = s.isPlayer ? s.c4 : 0;
   if (s.bot) s.bot.role = null;
 }
@@ -157,6 +168,9 @@ function updateSoldier(s, dt, ctl) {
   const fire = ctl.fire;
   const sprint = ctl.sprint && moving && !fire && !s.reloading;
 
+  if (ctl.aimX !== undefined) { s.aimX = ctl.aimX; s.aimY = ctl.aimY; }
+  s.scoped = !!(ctl.scope && s.cls.scopeRange && !moving && !s.reloading);
+  if (ctl.throwAt && s.nades > 0) throwGrenade(s, ctl.throwAt.x, ctl.throwAt.y);
   if (ctl.reload) startReload(s);
   if (s.reloading) { s.reloadT -= dt; if (s.reloadT <= 0) finishReload(s); }
 
@@ -171,7 +185,7 @@ function updateSoldier(s, dt, ctl) {
     } else { s.act = null; s.actT = 0; }
   } else { s.act = null; s.actT = 0; }
 
-  let speed = (sprint ? CFG.SPRINT : CFG.WALK) * s.mods.speed;
+  let speed = (sprint ? CFG.SPRINT : CFG.WALK) * s.mods.speed * s.cls.speed;
   if (m.slow[((s.y / CELL) | 0) * GW + ((s.x / CELL) | 0)]) speed *= 0.5;
   if (s.reloading) speed *= 0.85;
   if (fire) speed *= 0.8;
@@ -215,7 +229,8 @@ function doAction(s, a) {
 function explode(x, y, radius, maxDmg, attacker) {
   SFX.boom(x, y);
   for (const s of G.soldiers) {
-    if (!s.alive) continue;
+    if (!s.alive || (attacker && s.team === attacker.team && s !== attacker)) continue;
+    if (!losClear(G.m, x, y, s.x, s.y)) continue;   // walls block blast
     const d = dist(s.x, s.y, x, y);
     if (d < radius) damage(s, maxDmg * (1 - d / radius), attacker);
   }
@@ -244,7 +259,7 @@ function destroyBridge(team, attacker) {
   G.teams[1 - team].points += CFG.SABOTAGE_REWARD;
   if (attacker) attacker.points += CFG.SABOTAGE_REWARD;
   feed(`${TEAMS[team].name}'s bridge destroyed`, TEAMS[1 - team].color);
-  message(team === G.player.team ? 'Our bridge is down. Supply trucks are cut off' : 'Enemy bridge destroyed. Their supply line is cut', team === G.player.team ? '#ff5a4e' : '#5aa9ff', 5);
+  message(team === G.player.team ? 'Our bridge is down. No more trucks or reinforcements' : 'Enemy bridge destroyed. They can no longer reinforce', team === G.player.team ? '#ff5a4e' : '#5aa9ff', 5);
 }
 
 // ---------------- Drops
@@ -270,14 +285,7 @@ function update(dt) {
   const m = G.m;
 
   for (const s of G.soldiers) {
-    if (!s.alive) {
-      s.respawnT -= dt;
-      if (s.respawnT <= 0) {
-        if (s.isPlayer && !G.auto) spawnSoldier(s, G.respawnChoice || { type: 'base', idx: s.spot });
-        else spawnSoldier(s, botSpawnChoice(s));
-      }
-      continue;
-    }
+    if (!s.alive) continue;   // the dead wait for the next truck
     const ctl = (s.isPlayer && !G.auto) ? playerControl(s) : botThink(s, dt);
     updateSoldier(s, dt, ctl);
   }
@@ -299,6 +307,9 @@ function update(dt) {
   updateParticles(dt);
   updateCapture(dt);
   updateSupply(dt);
+  updateGrenades(dt);
+  G.visT -= dt;
+  if (G.visT <= 0) { G.visT = 0.15; computeVision(G.player.team); }
   updateDrops(dt);
   updateC4(dt);
   updateSappers(dt);
@@ -317,6 +328,10 @@ function update(dt) {
     if (lockTeam >= 0) message(lockTeam === G.player.team ? `We hold all three points. Keep them for ${CFG.WIN_HOLD} s` : `Enemy holds all three points! Retake one within ${CFG.WIN_HOLD} s`, TEAMS[lockTeam].color, 4);
   }
   if (lockTeam >= 0) { G.lock.t += dt; if (G.lock.t >= CFG.WIN_HOLD) return endMatch(lockTeam, 'Held all three points at once'); }
+  for (let t = 0; t < 2; t++) {
+    if (m.bridges[t].destroyed && !G.trucks.some(k => k.team === t) && !G.soldiers.some(s => s.team === t && s.alive))
+      return endMatch(1 - t, `${TEAMS[t].name} was wiped out with no bridge left to reinforce`);
+  }
   if (G.time >= CFG.TIME_LIMIT) {
     const h0 = m.points.filter(p => p.owner === 0).length, h1 = m.points.filter(p => p.owner === 1).length;
     if (h0 !== h1) return endMatch(h0 > h1 ? 0 : 1, 'Time limit: held more points');
@@ -427,7 +442,8 @@ function updateSupply(dt) {
       tm.supplyT = CFG.SUPPLY_INTERVAL;
       const lane = m.truckLanes[t];
       G.trucks.push({ team: t, x: lane.from, y: lane.y, dir: lane.dir, state: 'in', t: 0 });
-      if (t === G.player.team) message('Supply truck crossing the bridge', TEAMS[t].color, 3);
+      const dead = G.soldiers.filter(x => x.team === t && !x.alive).length;
+      if (t === G.player.team && dead) feed(`Truck crossing the bridge with ${dead} reinforcement${dead > 1 ? 's' : ''}`, TEAMS[t].color);
     }
   }
   for (const tr of G.trucks.slice()) {
@@ -438,9 +454,10 @@ function updateSupply(dt) {
         tr.x = lane.to; tr.state = 'unload'; tr.t = 4;
         const d = m.depots[tr.team];
         let c = G.caches.find(c => c.team === tr.team);
-        if (c) c.charges = Math.min(c.charges + CFG.CACHE_CHARGES, CFG.CACHE_CHARGES * 2);
+        if (c) c.charges = Math.min(c.charges + CFG.CACHE_CHARGES, CFG.CACHE_MAX);
         else G.caches.push({ team: tr.team, x: d.x, y: d.y, charges: CFG.CACHE_CHARGES });
-        if (tr.team === G.player.team) feed('Supplies delivered to the depot', TEAMS[tr.team].color);
+        // reinforcements dismount
+        for (const so of G.soldiers) if (so.team === tr.team && !so.alive) spawnSoldier(so, { type: 'depot' });
       }
     } else if (tr.state === 'unload') {
       tr.t -= dt; if (tr.t <= 0) { tr.state = 'out'; tr.dir = -tr.dir; }
@@ -454,9 +471,9 @@ function updateSupply(dt) {
     for (const s of G.soldiers) {
       if (!s.alive || s.team !== c.team || s.cacheCD > 0 || c.charges <= 0) continue;
       if (dist2(s.x, s.y, c.x, c.y) > 80 * 80) continue;
-      if (s.hp >= maxHp(s) && ammoTotal(s) >= CFG.MAG * (CFG.EXTRA_MAGS + 1)) continue;
+      if (s.hp >= maxHp(s) && ammoTotal(s) >= ammoFull(s)) continue;
       c.charges--; s.cacheCD = 6;
-      s.hp = maxHp(s); s.mag = CFG.MAG; s.mags = Array(CFG.EXTRA_MAGS).fill(CFG.MAG); s.reloading = false;
+      s.hp = maxHp(s); refillAmmo(s);
       if (s.isPlayer) { message('Resupplied: full health and ammo', '#7fd18b', 2); SFX.pickup(); }
     }
   }
@@ -471,9 +488,9 @@ function updateDrops(dt) {
     if (d.fall > 0) continue;
     for (const s of G.soldiers) {
       if (!s.alive || dist2(s.x, s.y, d.x, d.y) > 40 * 40) continue;
-      s.mags = Array(CFG.EXTRA_MAGS).fill(CFG.MAG);
+      s.mags = Array(s.cls.mags).fill(s.cls.mag);
       s.hp = Math.min(maxHp(s), s.hp + 60);
-      let txt = 'Supply drop: +2 magazines, +60 health';
+      let txt = `Supply drop: +${s.cls.mags} magazines, +60 health`;
       if (d.c4 && s.c4 < 1) { s.c4 = 1; txt += ', +1 C4'; }
       if (s.isPlayer) { message(txt, '#7fd18b', 2.5); SFX.pickup(); }
       G.drops.splice(G.drops.indexOf(d), 1);
@@ -513,4 +530,63 @@ function updateSappers(dt) {
 function endMatch(winner, reason) {
   G.over = true; G.winner = winner; G.reason = reason;
   if (typeof onMatchEnd === 'function') onMatchEnd();
+}
+
+// ---------------- Grenades
+function throwGrenade(s, tx, ty) {
+  let dx = tx - s.x, dy = ty - s.y, d = Math.hypot(dx, dy) || 1;
+  const reach = Math.min(d, CFG.GRENADE_RANGE);
+  dx /= d; dy /= d;
+  const k = 2.2;                       // ground friction; total travel = v0 / k
+  s.nades--;
+  G.grenades.push({ x: s.x + dx * 20, y: s.y + dy * 20, vx: dx * reach * k, vy: dy * reach * k, k, fuse: CFG.GRENADE_FUSE, team: s.team, owner: s, spin: 0 });
+  if (s.isPlayer) SFX.click(0.15);
+}
+function updateGrenades(dt) {
+  const m = G.m;
+  for (const g of G.grenades.slice()) {
+    g.fuse -= dt;
+    const nx = g.x + g.vx * dt, ny = g.y + g.vy * dt;
+    if (solidAt(m, nx, g.y)) g.vx = -g.vx * 0.45; else g.x = nx;
+    if (solidAt(m, g.x, ny)) g.vy = -g.vy * 0.45; else g.y = ny;
+    g.x = clamp(g.x, 5, W - 5); g.y = clamp(g.y, 5, H - 5);
+    const f = Math.exp(-g.k * dt); g.vx *= f; g.vy *= f;
+    g.spin += Math.hypot(g.vx, g.vy) * dt * 0.1;
+    if (g.fuse <= 0) {
+      G.grenades.splice(G.grenades.indexOf(g), 1);
+      explode(g.x, g.y, CFG.GRENADE_RADIUS, CFG.GRENADE_DMG, g.owner);
+    }
+  }
+}
+
+// ---------------- Fog of war: shared team vision on the coarse grid
+function castVision(vis, m, x, y, range, a0, a1, rays) {
+  const step = 12;
+  for (let r = 0; r < rays; r++) {
+    const a = a0 + (a1 - a0) * (r + 0.5) / rays, cx = Math.cos(a), cy = Math.sin(a);
+    for (let d = 0; d <= range; d += step) {
+      const px = x + cx * d, py = y + cy * d;
+      if (px < 0 || py < 0 || px >= W || py >= H) break;
+      vis[((py / CELL) | 0) * GW + ((px / CELL) | 0)] = 1;
+      if (m.shot[((py / CELL) | 0) * GW + ((px / CELL) | 0)]) break;
+    }
+  }
+}
+function computeVision(team) {
+  const m = G.m, vis = G.teams[team].vis;
+  vis.fill(0);
+  G.visN = (G.visN || 0) + 1;
+  for (const s of G.soldiers) {
+    if (!s.alive || s.team !== team) continue;
+    castVision(vis, m, s.x, s.y, visionRange(s), 0, TAU, 240);
+    if (s.scoped) castVision(vis, m, s.x, s.y, s.cls.scopeRange, s.angle - s.cls.scopeCone, s.angle + s.cls.scopeCone, 110);
+    // always see the space right around you
+    const r = Math.ceil(CFG.VISION_NEAR / CELL), ci = (s.x / CELL) | 0, cj = (s.y / CELL) | 0;
+    for (let j = cj - r; j <= cj + r; j++) for (let i = ci - r; i <= ci + r; i++) if (i >= 0 && j >= 0 && i < GW && j < GH && (i - ci) ** 2 + (j - cj) ** 2 <= r * r) vis[j * GW + i] = 1;
+  }
+  for (const e of G.soldiers) if (e.alive && e.team !== team && isVisible(team, e.x, e.y)) e.spotted[team] = G.time;
+}
+function isVisible(team, x, y) {
+  if (x < 0 || y < 0 || x >= W || y >= H) return false;
+  return G.teams[team].vis[((y / CELL) | 0) * GW + ((x / CELL) | 0)] === 1;
 }

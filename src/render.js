@@ -19,7 +19,26 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-function zoom() { return Math.max(0.35, Math.min(VH / CFG.VIEW_H, VW / 1450)); }
+let zoomScope = 1;
+function zoom() { return Math.max(0.3, Math.min(VH / CFG.VIEW_H, VW / 1450)) * zoomScope; }
+let fogCanvas = null, fogSoft = null, fogStamp = -1;
+function fogLayer() {
+  if (!fogCanvas) fogCanvas = makeCanvas(GW, GH);
+  if (fogStamp !== G.visN) {
+    fogStamp = G.visN;
+    const g = fogCanvas.getContext('2d'), img = g.createImageData(GW, GH), vis = G.teams[G.player.team].vis;
+    for (let i = 0; i < vis.length; i++) { img.data[i * 4 + 3] = vis[i] ? 0 : 150; }
+    g.putImageData(img, 0, 0);
+    if (!fogSoft) fogSoft = makeCanvas(GW * 2, GH * 2);
+    const g2 = fogSoft.getContext('2d');
+    g2.clearRect(0, 0, GW * 2, GH * 2);
+    g2.filter = 'blur(3px)';
+    g2.drawImage(fogCanvas, 0, 0, GW * 2, GH * 2);
+    g2.filter = 'none';
+  }
+  return fogSoft;
+}
+function seen(x, y) { return isVisible(G.player.team, x, y); }
 function screenToWorld(sx, sy) { const z = zoom(); return { x: G.cam.x + (sx - VW / 2) / z, y: G.cam.y + (sy - VH / 2) / z }; }
 
 function render(dt) {
@@ -31,9 +50,12 @@ function render(dt) {
   const P = G.player;
   let tx = P.x, ty = P.y;
   if (P.alive && !G.auto && typeof mouse !== 'undefined') {
-    const ox = clamp((mouse.x - VW / 2) / z * 0.25, -260, 260), oy = clamp((mouse.y - VH / 2) / z * 0.25, -200, 200);
+    const lim = P.scoped ? P.cls.scopeRange * 0.65 : 260;
+    const f = P.scoped ? 0.9 : 0.25;
+    const ox = clamp((mouse.x - VW / 2) / z * f, -lim, lim), oy = clamp((mouse.y - VH / 2) / z * f, -lim * 0.8, lim * 0.8);
     tx += ox; ty += oy;
   }
+  zoomScope = lerp(zoomScope, P.scoped ? 0.72 : 1, 1 - Math.exp(-dt * 6));
   const k = 1 - Math.exp(-dt * 8);
   G.cam.x = lerp(G.cam.x, tx, k); G.cam.y = lerp(G.cam.y, ty, k);
   // keep the view inside the map
@@ -57,11 +79,15 @@ function render(dt) {
   drawDepots(m);
   drawDrops();
   drawC4();
-  for (const s of G.soldiers) if (s.alive && s.x > vx0 - 50 && s.x < vx1 + 50 && s.y > vy0 - 50 && s.y < vy1 + 50) drawSoldier(s);
+  drawGrenades();
+  for (const s of G.soldiers) if (s.alive && s.x > vx0 - 50 && s.x < vx1 + 50 && s.y > vy0 - 50 && s.y < vy1 + 50 && (s.team === P.team || seen(s.x, s.y))) drawSoldier(s);
   drawBullets();
   // obstacles
   forBlockersNear(m, vx0 - 60, vy0 - 60, vx1 + 60, vy1 + 60, o => { if (!o.water) drawSolid(ctx, o, B); });
   drawTrucks();
+  // fog of war: dim what your team cannot currently see
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(fogLayer(), 0, 0, W, H);
   drawParticles();
 
   // screen space
@@ -155,6 +181,19 @@ function drawDrops() {
   }
 }
 
+function drawGrenades() {
+  for (const g of G.grenades) {
+    if (g.team !== G.player.team && !seen(g.x, g.y)) continue;
+    ctx.fillStyle = '#3b4a2c'; circle(ctx, g.x, g.y, 6);
+    ctx.fillStyle = '#26301c'; ctx.fillRect(g.x - 2 + Math.cos(g.spin) * 3, g.y - 2 + Math.sin(g.spin) * 3, 4, 4);
+    // danger ring and fuse
+    ctx.strokeStyle = `rgba(255,90,78,${0.25 + 0.25 * Math.sin(G.time * 12)})`; ctx.lineWidth = 2; ctx.setLineDash([8, 8]);
+    ctx.beginPath(); ctx.arc(g.x, g.y, CFG.GRENADE_RADIUS, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = '#ff5a4e'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(g.x, g.y, 13, -Math.PI / 2, -Math.PI / 2 + TAU * g.fuse / CFG.GRENADE_FUSE); ctx.stroke();
+  }
+}
+
 function drawC4() {
   for (const c of G.c4s) {
     ctx.fillStyle = '#6b6a4c'; ctx.fillRect(c.x - 12, c.y - 8, 24, 16);
@@ -219,6 +258,7 @@ function drawBullets() {
 
 function drawTrucks() {
   for (const t of G.trucks) {
+    if (t.team !== G.player.team && !seen(t.x, t.y)) continue;
     ctx.save(); ctx.translate(t.x, t.y); if (t.dir < 0) ctx.rotate(Math.PI);
     ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(-38, -16, 90, 40);
     ctx.fillStyle = '#151515'; for (const wx of [-30, -8, 26]) { ctx.fillRect(wx - 7, -22, 14, 6); ctx.fillRect(wx - 7, 16, 14, 6); }
@@ -350,13 +390,13 @@ function drawHUD() {
   ctx.fillStyle = hpF > 0.5 ? '#7fd18b' : hpF > 0.25 ? '#e6ad45' : '#ff5a4e'; ctx.fillRect(24, by + 28, 160 * hpF, 10);
   txt(String(Math.ceil(P.hp)), 192, by + 38, `600 14px ${M}`, '#fff');
   txt(String(P.mag), 24, by + 82, `700 40px ${D}`, P.mag === 0 ? '#ff5a4e' : '#fff');
-  txt(`/ ${CFG.MAG}`, 78, by + 82, `500 14px ${M}`, '#8e9b92');
+  txt(`/ ${P.cls.mag}`, 78, by + 82, `500 14px ${M}`, '#8e9b92');
   // magazines
-  for (let i = 0; i < Math.max(CFG.EXTRA_MAGS, P.mags.length); i++) {
+  for (let i = 0; i < Math.max(P.cls.mags, P.mags.length); i++) {
     const mx = 128 + i * 18, my = by + 52;
     ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1; ctx.strokeRect(mx + 0.5, my + 0.5, 12, 30);
     const r = P.mags[i] || 0;
-    if (r > 0) { ctx.fillStyle = '#e6ad45'; const hh = 28 * r / CFG.MAG; ctx.fillRect(mx + 2, my + 2 + 28 - hh, 9, hh); }
+    if (r > 0) { ctx.fillStyle = '#e6ad45'; const hh = 28 * r / P.cls.mag; ctx.fillRect(mx + 2, my + 2 + 28 - hh, 9, hh); }
   }
   txt('MAGS', 128, by + 48, `600 10px ${D}`, '#8e9b92');
   if (P.reloading) {
@@ -366,6 +406,13 @@ function drawHUD() {
   } else if (P.mag === 0 && !P.mags.length) txt('OUT OF AMMO', 196, by + 70, `600 11px ${D}`, '#ff5a4e');
   else if (P.mag < 8 && P.mags.length) txt('R  RELOAD', 196, by + 70, `600 11px ${D}`, '#e6ad45');
   txt(`C4 ×${P.c4}`, 196, by + 90, `600 12px ${M}`, P.c4 ? '#e6ad45' : '#5d665f');
+  txt(`G ×${P.nades}`, 250, by + 90, `600 12px ${M}`, P.nades ? '#e6ad45' : '#5d665f');
+  txt(P.cls.name.toUpperCase() + (P.scoped ? '  · SCOPED' : ''), 24, by - 8, `700 12px ${D}`, P.scoped ? '#e6ad45' : '#cfd5cc');
+  if (P.alive) {
+    const sf = slopeFactor(P);
+    if (sf < 1) txt('▼ DOWNHILL  aim +10%', 312, by - 8, `600 12px ${D}`, '#7fd18b', 'right');
+    else if (sf > 1) txt('▲ UPHILL  aim −20%', 312, by - 8, `600 12px ${D}`, '#ff8a6e', 'right');
+  }
   txt(`${P.points} pts`, 296, by + 22, `500 12px ${M}`, '#e6ad45', 'right');
 
   // minimap
@@ -393,7 +440,7 @@ function drawHUD() {
   // crosshair
   if (P.alive && !G.auto && typeof mouse !== 'undefined' && !G.paused) {
     const moving = Math.hypot(P.vx, P.vy) > 20;
-    const sp = (moving ? CFG.SPREAD_MOVING : CFG.SPREAD) + P.heat;
+    const sp = currentSpread(P, moving);
     const dW = Math.hypot(screenToWorld(mouse.x, mouse.y).x - P.x, screenToWorld(mouse.x, mouse.y).y - P.y);
     const gapPx = 6 + sp * dW * zoom();
     ctx.strokeStyle = G.hitT > 0 ? '#ff5a4e' : 'rgba(255,255,255,0.9)'; ctx.lineWidth = 2;
@@ -432,7 +479,7 @@ function drawMap(c, x, y, w, h, big) {
     c.fillText(p.name, x + p.x * s, y + p.y * s);
   }
   for (const d of G.drops) { c.fillStyle = '#7fd18b'; c.fillRect(x + d.x * s - 3, y + d.y * s - 3, 6, 6); }
-  for (const t of G.trucks) { c.fillStyle = TEAMS[t.team].light; c.fillRect(x + t.x * s - 4, y + t.y * s - 3, 8, 6); }
+  for (const t of G.trucks) { if (t.team !== P.team && !seen(t.x, t.y)) continue; c.fillStyle = TEAMS[t.team].light; c.fillRect(x + t.x * s - 4, y + t.y * s - 3, 8, 6); }
   for (const k of G.c4s) { if (Math.sin(G.time * 12) > 0) { c.fillStyle = '#ff3b2f'; circle(c, x + k.x * s, y + k.y * s, 5); } }
   for (const so of G.soldiers) {
     if (!so.alive) continue;

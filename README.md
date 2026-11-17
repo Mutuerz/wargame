@@ -20,6 +20,8 @@ A keyboard and mouse are required.
 | Left click (hold) | Fire (automatic) |
 | R | Reload |
 | Shift | Sprint (you cannot fire while sprinting) |
+| G | Throw grenade toward the cursor (if you carry one) |
+| Right click (hold) or Q | Sniper scope: hold position and see/shoot much farther |
 | F (hold 3 s) | Plant C4 on the enemy bridge, or defuse C4 on yours |
 | M | Toggle the full map |
 | Tab (hold) | Scoreboard |
@@ -27,19 +29,21 @@ A keyboard and mouse are required.
 | Esc | Pause |
 | N | Mute or unmute |
 
-On the deployment screen: left click a spawn on the map to send a soldier there, right click to pull one back, shift-click (or "Spawn here") to choose where you spawn.
+On the deployment screen (this sets where the squad starts the match): left click a spawn on the map to send a soldier there, right click to pull one back, shift-click (or "Spawn here") to choose where you spawn.
 
 ## How a match works
 
 - **Teams:** 10 v 10. You are Blue (west base). Red's commander picks a deployment pattern on its own.
 - **Map:** 6000 × 3600 px. Each base is the outer 10% of the width and the neutral zone is the middle 80%. Crossing the whole map on foot takes about 60 seconds. The west half is generated from the seed and copied with a 180° rotation, so both sides are identical.
 - **Theatres:** Forest, Desert, Urban ruins, Snowfield and Swamp. Each has its own obstacles, ground art and weather (falling leaves, blowing sand, ash and smoke, snow, fog and fireflies). Swamp pools halve your speed.
-- **Weapons:** automatic rifle, 25-round magazine plus 2 spare magazines. Reload takes 2.2 s (2.8 s from empty). Partly used magazines go back in your pouch, so magazines are real, not a shared ammo pool.
+- **Classes:** most soldiers are **riflemen** (automatic rifle, 25-round magazine plus 2 spares, reload 2.2 s or 2.8 s from empty). Each match, 2 random soldiers per team are **snipers** (5-round bolt rifle, 3 spare magazines, 75 damage, 2200 px range, wider vision). Holding the scope roots the sniper in place, zooms the view out toward the cursor, extends vision in a narrow cone out to 1900 px and tightens accuracy. Your own class is random too and shows above the health bar. Partly used magazines go back in your pouch.
+- **Grenades:** each soldier has a 50% chance to spawn carrying one. Throw range is at most 380 px, it bounces off cover, and it detonates 5 seconds later (170 px radius, walls block the blast, no friendly fire). Bots throw at enemies hiding behind cover and run from live grenades.
+- **Fog of war:** you only see what your team sees. Each soldier lights up a radius around them (750 px riflemen, 950 px snipers) blocked by obstacles, plus a scope cone for snipers. Enemies outside that area are hidden on screen and on the minimap.
+- **Terrain height:** the ground has hills and ridges, shown with shading and contour lines (one line every half level). Shooting at a point lower than you gives 1.1× accuracy; shooting uphill gives 1.2× more spread. The HUD shows ▼ DOWNHILL or ▲ UPHILL when it applies.
 - **Capture points:** A, B and C sit in the neutral zone with sandbag cover. Standing in the circle captures it (faster with more soldiers, up to 3; contested points freeze). **Win** by holding all three at the same time for 20 seconds. After 25 minutes, the team holding more points wins.
-- **Supply trucks:** every 5 minutes each team's truck crosses its bridge and stocks the base depot. Walk onto the depot crates for full health and ammo.
-- **C4:** you start with one charge. Stand on the marked section in the middle of the enemy bridge and hold F for 3 seconds. After a 5 second fuse the bridge is destroyed and that team gets no more trucks. Red sends its own sappers at your bridge from time to time.
-- **Supply drops:** crates parachute in at random spots at least 1500 px from both bases (2 at the start, more every 75 s, up to 4 on the map). They give 2 full magazines, 60 health and sometimes a C4 charge.
-- **Respawn:** 8 seconds, at any base spawn or at a point your team holds and is not contested.
+- **Trucks and respawn:** every minute each team's truck crosses its bridge to the base depot. It restocks the depot (walk onto the crates for full health and ammo) and it is the **only way back into the fight**: everyone who died since the last truck rides in on it and dismounts at the depot.
+- **C4:** you start with one charge. Stand on the marked section in the middle of the enemy bridge and hold F for 3 seconds. After a 5 second fuse the bridge is destroyed: that team gets no more trucks, supplies or reinforcements. A team whose bridge is down and whose last soldier dies loses. Red sends its own sappers at your bridge from time to time.
+- **Supply drops:** crates parachute in at random spots at least 1500 px from both bases (2 at the start, more every 75 s, up to 4 on the map). They refill your spare magazines, give 60 health and sometimes a C4 charge.
 
 ## Perk points
 
@@ -67,4 +71,4 @@ Points are earned and banked now; perks themselves are not designed yet.
 
 ## Testing helpers
 
-URL parameters: `?biome=desert&seed=42` pick the map, `?autoplay=1` makes your soldier a bot and starts immediately, and `?speed=8` runs the simulation 8× faster. `window.__game()` returns the live match state in the console.
+URL parameters: `?biome=desert&seed=42` pick the map, `?autoplay=1` makes your soldier a bot and starts immediately, and `?speed=8` runs the simulation 8× faster, and `?class=sniper` forces your soldier to be a sniper. `window.__game()` returns the live match state in the console.

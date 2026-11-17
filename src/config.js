@@ -14,24 +14,25 @@ const CFG = {
   WALK: 100,                  // px/s, 6000 px map = 60 s on foot
   SPRINT: 150,
   HP: 100,
-  MAG: 25,                    // rounds per magazine
-  EXTRA_MAGS: 2,              // spare magazines carried
-  FIRE_RATE: 10,              // rounds per second
-  RELOAD: 2.2,                // seconds, tactical reload
-  RELOAD_EMPTY: 2.8,          // seconds, reload from an empty magazine
-  DMG: 15,
-  BULLET_SPEED: 1500,
-  BULLET_RANGE: 1050,
-  SPREAD: 0.035,
-  SPREAD_MOVING: 0.07,
-  RESPAWN: 8,
+  VISION_NEAR: 90,            // always visible around each soldier (fog of war)
   SPAWN_SHIELD: 1.5,
   CAP_R: 170,                 // capture radius
   CAP_RATE: 4,                // % per second per soldier (max 3 counted): 25 s alone from neutral
   WIN_HOLD: 20,               // seconds a team must keep all three points to win
-  SUPPLY_INTERVAL: 300,       // a supply truck every 5 minutes
+  SUPPLY_INTERVAL: 60,        // a truck every minute: ammo, health and reinforcements
   TRUCK_SPEED: 170,
-  CACHE_CHARGES: 12,
+  CACHE_CHARGES: 6,
+  CACHE_MAX: 12,
+  GRENADE_CHANCE: 0.5,        // half the soldiers spawn with a grenade
+  GRENADE_RANGE: 380,         // max throw distance
+  GRENADE_FUSE: 5,
+  GRENADE_RADIUS: 170,
+  GRENADE_DMG: 110,
+  SNIPERS_PER_TEAM: 2,        // randomly chosen each match
+  HEIGHT_MAX: 3,              // terrain levels
+  HEIGHT_STEP: 0.25,          // level difference that counts as up/downhill
+  DOWNHILL_ACC: 1.1,          // spread divided by this when shooting downhill
+  UPHILL_PEN: 1.2,            // spread multiplied by this when shooting uphill
   C4_PLANT: 3,                // seconds holding F
   C4_FUSE: 5,
   C4_RADIUS: 230,
@@ -46,6 +47,19 @@ const CFG = {
   SABOTAGE_REWARD: 50,
   TIME_LIMIT: 25 * 60,
   VIEW_H: 1000,               // world pixels visible vertically
+};
+
+// Soldier classes. Rifleman is the default; snipers are assigned at random.
+const CLASSES = {
+  rifleman: {
+    name: 'Rifleman', mag: 25, mags: 2, rate: 10, reload: 2.2, reloadEmpty: 2.8, dmg: 15,
+    bulletSpeed: 1500, range: 1050, spread: 0.035, spreadMove: 0.07, speed: 1, vision: 750, auto: true,
+  },
+  sniper: {
+    name: 'Sniper', mag: 5, mags: 3, rate: 0.9, reload: 3.0, reloadEmpty: 3.4, dmg: 75,
+    bulletSpeed: 2600, range: 2200, spread: 0.01, spreadMove: 0.1, speed: 0.95, vision: 950, auto: false,
+    scopeRange: 1900, scopeCone: 0.32, scopeSpread: 0.35,
+  },
 };
 
 const SKILLS = [
