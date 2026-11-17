@@ -9,11 +9,12 @@ function generateMap(biomeKey, seed) {
     const density = attempt < 6 ? 1 : 0.7;
     const m = tryGenerate(biomeKey, (seed + attempt * 7919) >>> 0, density);
     buildGrids(m);
-    if (checkConnectivity(m)) { m.seed = seed; return m; }
+    if (checkConnectivity(m)) { m.seed = seed; m.solids.forEach((o, i) => { o.sid = i; }); return m; }
   }
   const m = tryGenerate(biomeKey, seed >>> 0, 0.4);
   buildGrids(m);
   m.seed = seed;
+  m.solids.forEach((o, i) => { o.sid = i; });
   return m;
 }
 

@@ -31,7 +31,7 @@ window.addEventListener('keydown', e => {
   }
   else if (e.code === 'KeyR') reloadPressed = true;
   else if (e.code === 'KeyG') throwPressed = true;
-  else if (e.code === 'KeyE' && G.player.riding) dismount(G.player.riding, G.player);
+  else if (e.code === 'KeyE' && G.player.riding) { if (G.online) NET.act({ a: 'dismount' }); else dismount(G.player.riding, G.player); }
   else if (!G.player.alive && (e.code === 'Space' || e.code === 'ArrowRight')) G.specIdx++;
   else if (!G.player.alive && e.code === 'ArrowLeft') G.specIdx--;
   else if (e.code === 'KeyM') G.showMap = !G.showMap;
@@ -44,7 +44,7 @@ window.addEventListener('blur', () => { keys.clear(); mouse.down = false; mouse.
 cv.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
 cv.addEventListener('mousedown', e => {
   if (G && G.targeting && !G.over) {
-    if (e.button === 0) { const w = G.showMap ? mapToWorld(mouse.x, mouse.y) : screenToWorld(e.clientX, e.clientY); if (w) callStrike(G.player.team, w.x, w.y); }
+    if (e.button === 0) { const w = G.showMap ? mapToWorld(mouse.x, mouse.y) : screenToWorld(e.clientX, e.clientY); if (w) { if (G.online) NET.act({ a: 'strike', x: Math.round(w.x), y: Math.round(w.y) }); else callStrike(G.player.team, w.x, w.y); } }
     G.targeting = false; return;
   }
   if (G && !G.player.alive && !G.player.riding && !G.over) { G.specIdx += e.button === 2 ? -1 : 1; return; }
@@ -69,7 +69,7 @@ function playerControl(s) {
 }
 
 // ---------- main menu
-function show(id) { for (const s of ['menu', 'deploy', 'pause', 'over', 'perks']) $(s).hidden = s !== id; }
+function show(id) { for (const s of ['menu', 'deploy', 'pause', 'over', 'perks', 'online']) $(s).hidden = s !== id; }
 
 function buildMenu() {
   const wrap = $('biomes'); wrap.innerHTML = '';
@@ -88,6 +88,7 @@ function buildMenu() {
     document.querySelectorAll('#skill button').forEach(x => x.classList.toggle('on', x === b));
   });
   $('toDeploy').onclick = () => { SFX.init(); openDeploy(); };
+  $('toOnline').onclick = () => { SFX.init(); NET.open(); };
 }
 
 function regenMenuMap() {
@@ -228,12 +229,14 @@ function beginMatch(auto = false) {
 function togglePause() {
   if (!G || G.over) return;
   if (!$('perks').hidden) { togglePerks(); return; }
-  G.paused = !G.paused;
+  G.paused = !G.paused;   // online matches keep running; this only opens the menu
+  $('pauseTitle').textContent = G.online ? 'Menu' : 'Paused';
+  $('quit').textContent = G.online ? 'Leave match' : 'Quit to menu';
   $('pause').hidden = !G.paused;
   cv.classList.toggle('playing', !G.paused);
 }
 $('resume').onclick = togglePause;
-$('quit').onclick = () => { G = null; $('respawn').hidden = true; cv.classList.remove('playing'); show('menu'); };
+$('quit').onclick = () => { if (G && G.online) { $('pause').hidden = true; NET.leave(); return; } G = null; $('respawn').hidden = true; cv.classList.remove('playing'); show('menu'); };
 
 function togglePerks() {
   const open = $('perks').hidden;
@@ -289,6 +292,7 @@ function onMatchEnd() {
   cv.classList.remove('playing');
   $('respawn').hidden = true;
   const P = G.player, w = G.winner;
+  $('rematch').textContent = 'Rematch on this map'; $('toMenu').textContent = 'Main menu';
   $('overEyebrow').textContent = `Match over · ${fmtTime(G.time)}`;
   $('overTitle').textContent = w === -1 ? 'Draw' : w === P.team ? 'Victory' : 'Defeat';
   $('overTitle').style.color = w === -1 ? 'var(--fg)' : TEAMS[w].color;
@@ -301,15 +305,16 @@ function onMatchEnd() {
   $('overStats').innerHTML = tables.join('');
   show('over');
 }
-$('rematch').onclick = () => beginMatch();
-$('toMenu').onclick = () => { G = null; show('menu'); };
+$('rematch').onclick = () => { if (G && G.online) NET.backToLobby(); else beginMatch(); };
+$('toMenu').onclick = () => { if (G && G.online) { NET.leave(); return; } G = null; show('menu'); };
 
 // ---------- loop
 let last = performance.now(), acc = 0;
 const STEP = 1 / 60;
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
-  if (G && !G.paused && !G.over) {
+  if (G && G.online) NET.frame(dt);
+  else if (G && !G.paused && !G.over) {
     acc += dt * SPEED;
     let n = 0;
     while (acc >= STEP && n < SPEED * 6 + 2) { update(STEP); acc -= STEP; n++; if (G.over) break; }

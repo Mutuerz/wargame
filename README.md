@@ -11,6 +11,12 @@ No build step and no dependencies. Either:
 
 A keyboard and mouse are required.
 
+## Play online
+
+Bridgehead also has an online mode for up to 20 people (bots fill the empty slots). Click **Play online with friends**
+on the main menu, pick a name and a room code, and share the code. The server lives in `server/`; how to run it on a
+free Oracle Cloud VM (setup script included) is in [deploy/README.md](deploy/README.md).
+
 ## Controls
 
 | Key | Action |

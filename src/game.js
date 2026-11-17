@@ -99,6 +99,11 @@ function spawnSoldier(s, choice) {
 
 function message(text, color = '#e3e7df', t = 3.5) { G.msg = { text, color, t, max: t }; }
 function feed(text, color) { G.feed.unshift({ text, color, t: 7 }); if (G.feed.length > 6) G.feed.pop(); }
+// Messages meant for one team or one soldier. Offline they show only when they concern the local player;
+// the online server replaces these three to route them to the right clients.
+function msgFor(team, text, color, t) { if (G.player && team === G.player.team) message(text, color, t); }
+function msgTo(s, text, color, t) { if (s === G.player) message(text, color, t); }
+function feedFor(team, text, color) { if (G.player && team === G.player.team) feed(text, color); }
 
 // ---------------- Weapons
 function startReload(s) {
@@ -226,12 +231,12 @@ function doAction(s, a) {
     s.c4--;
     G.c4s.push({ x: a.bridge.cx, y: a.bridge.cy, bridge: a.bridge.team, team: s.team, fuse: CFG.C4_FUSE, beep: 0, owner: s });
     feed(`${s.name} planted C4 on ${TEAMS[a.bridge.team].name}'s bridge`, TEAMS[s.team].color);
-    if (a.bridge.team === G.player.team) message('Enemy C4 on our bridge! Defuse it with F', '#ff5a4e', 4);
-    else if (s.team === G.player.team) message('C4 planted on the enemy bridge', TEAMS[0].color, 3);
+    msgFor(a.bridge.team, 'Enemy C4 on our bridge! Defuse it with F', '#ff5a4e', 4);
+    msgFor(s.team, 'C4 planted on the enemy bridge', TEAMS[s.team].color, 3);
   } else {
     G.c4s.splice(G.c4s.indexOf(a.c4), 1);
     feed(`${s.name} defused the C4`, TEAMS[s.team].color);
-    if (s.team === G.player.team) message('C4 defused. Bridge saved', TEAMS[0].color, 3);
+    msgFor(s.team, 'C4 defused. Bridge saved', TEAMS[s.team].color, 3);
     s.points += 25;
   }
 }
@@ -275,7 +280,8 @@ function destroyBridge(team, attacker) {
   G.teams[1 - team].points += CFG.SABOTAGE_REWARD;
   if (attacker) attacker.points += CFG.SABOTAGE_REWARD;
   feed(`${TEAMS[team].name}'s bridge destroyed`, TEAMS[1 - team].color);
-  message(team === G.player.team ? 'Our bridge is down. No more trucks or reinforcements' : 'Enemy bridge destroyed. They can no longer reinforce', team === G.player.team ? '#ff5a4e' : '#5aa9ff', 5);
+  msgFor(team, 'Our bridge is down. No more trucks or reinforcements', '#ff5a4e', 5);
+  msgFor(1 - team, 'Enemy bridge destroyed. They can no longer reinforce', TEAMS[1 - team].color, 5);
 }
 
 // ---------------- Drops
@@ -329,7 +335,7 @@ function update(dt) {
   G.cmdT = (G.cmdT || 0) - dt;
   if (G.cmdT <= 0) { G.cmdT = 1; botCommanderStrike(1); if (G.auto) botCommanderStrike(0); }
   G.visT -= dt;
-  if (G.visT <= 0) { G.visT = 0.15; computeVision(G.player.team); }
+  if (G.visT <= 0) { G.visT = 0.15; for (const t of (G.visTeams || [G.player.team])) computeVision(t); }
   updateDrops(dt);
   updateC4(dt);
   updateSappers(dt);
@@ -345,7 +351,10 @@ function update(dt) {
   for (let t = 0; t < 2; t++) if (m.points.every(p => p.owner === t)) lockTeam = t;
   if (lockTeam !== G.lock.team) {
     G.lock = { team: lockTeam, t: 0 };
-    if (lockTeam >= 0) message(lockTeam === G.player.team ? `We hold all five points. Keep them for ${CFG.WIN_HOLD} s` : `Enemy holds all five points! Retake one within ${CFG.WIN_HOLD} s`, TEAMS[lockTeam].color, 4);
+    if (lockTeam >= 0) {
+      msgFor(lockTeam, `We hold all five points. Keep them for ${CFG.WIN_HOLD} s`, TEAMS[lockTeam].color, 4);
+      msgFor(1 - lockTeam, `Enemy holds all five points! Retake one within ${CFG.WIN_HOLD} s`, TEAMS[lockTeam].color, 4);
+    }
   }
   if (lockTeam >= 0) { G.lock.t += dt; if (G.lock.t >= CFG.WIN_HOLD) return endMatch(lockTeam, 'Held all five points at once'); }
   for (let t = 0; t < 2; t++) {
@@ -453,9 +462,9 @@ function onCapture(p, t) {
   G.stats.captures[t]++;
   for (const s of G.soldiers) if (s.alive && s.team === t && dist2(s.x, s.y, p.x, p.y) < CFG.CAP_R * CFG.CAP_R) s.points += CFG.CAPTURER_REWARD;
   feed(`${TEAMS[t].name} captured ${p.name}  +${CFG.CAPTURE_REWARD} pts`, TEAMS[t].color);
-  const mine = t === G.player.team;
-  message(mine ? `Point ${p.name} captured` : `Point ${p.name} lost`, TEAMS[t].color, 2.5);
-  SFX.capture(mine);
+  msgFor(t, `Point ${p.name} captured`, TEAMS[t].color, 2.5);
+  msgFor(1 - t, `Point ${p.name} lost`, TEAMS[t].color, 2.5);
+  if (G.player) SFX.capture(t === G.player.team);
   for (const s of G.soldiers) if (s.bot) s.bot.objT = Math.min(s.bot.objT, Math.random() * 1.5);
 }
 
@@ -470,7 +479,7 @@ function updateSupply(dt) {
       const lane = m.truckLanes[t];
       G.trucks.push({ team: t, x: lane.from, y: lane.y, dir: lane.dir, state: 'in', t: 0 });
       const dead = G.soldiers.filter(x => x.team === t && !x.alive).length;
-      if (t === G.player.team && dead) feed(`Truck crossing the bridge with ${dead} reinforcement${dead > 1 ? 's' : ''}`, TEAMS[t].color);
+      if (dead) feedFor(t, `Truck crossing the bridge with ${dead} reinforcement${dead > 1 ? 's' : ''}`, TEAMS[t].color);
     }
   }
   for (const tr of G.trucks.slice()) {
@@ -502,7 +511,8 @@ function updateSupply(dt) {
       if (s.hp >= maxHp(s) && ammoTotal(s) >= ammoFull(s)) continue;
       c.charges--; s.cacheCD = 6;
       s.hp = maxHp(s); refillAmmo(s);
-      if (s.isPlayer) { message('Resupplied: full health and ammo', '#7fd18b', 2); SFX.pickup(); }
+      msgTo(s, 'Resupplied: full health and ammo', '#7fd18b', 2);
+      if (s.isPlayer) SFX.pickup();
     }
   }
   G.caches = G.caches.filter(c => c.charges > 0);
@@ -520,7 +530,8 @@ function updateDrops(dt) {
       s.hp = Math.min(maxHp(s), s.hp + 60);
       let txt = `Supply drop: +${s.cls.mags} magazines, +60 health`;
       if (d.c4 && s.c4 < 1) { s.c4 = 1; txt += ', +1 C4'; }
-      if (s.isPlayer) { message(txt, '#7fd18b', 2.5); SFX.pickup(); }
+      msgTo(s, txt, '#7fd18b', 2.5);
+      if (s.isPlayer) SFX.pickup();
       G.drops.splice(G.drops.indexOf(d), 1);
       break;
     }
@@ -663,7 +674,7 @@ function launchCart(team, riders) {
   for (const r of riders) r.riding = cart;
   G.carts.push(cart);
   if (!path) { dismount(cart); return; }
-  if (team === G.player.team) feed(riders.length ? `Transport with ${riders.length} soldier${riders.length > 1 ? 's' : ''} and supplies heading to ${tgt.name}` : `Supply cart heading to ${tgt.name}`, TEAMS[team].color);
+  feedFor(team, riders.length ? `Transport with ${riders.length} soldier${riders.length > 1 ? 's' : ''} and supplies heading to ${tgt.name}` : `Supply cart heading to ${tgt.name}`, TEAMS[team].color);
 }
 function dropFieldCache(cart) {
   if (cart.dropped) return;
@@ -695,7 +706,7 @@ function damageCart(c, amount, attacker) {
   explode(c.x, c.y, 110, 30, attacker);
   stampScorch(G.art, c.x, c.y, 50);
   feed(`${attacker ? attacker.name : 'Blast'} destroyed a ${TEAMS[c.team].name} transport${n ? ` (${n} aboard)` : ''}`, attacker ? TEAMS[attacker.team].color : '#e6ad45');
-  if (c.team === G.player.team && n) message('Our transport was destroyed', '#ff5a4e', 3);
+  if (n) msgFor(c.team, 'Our transport was destroyed', '#ff5a4e', 3);
 }
 function updateCarts(dt) {
   for (const c of G.carts.slice()) {
@@ -734,8 +745,8 @@ function callStrike(team, x, y) {
   G.teams[team].points -= CFG.STRIKE_COST;
   x = clamp(x, CFG.STRIKE_W / 2, W - CFG.STRIKE_W / 2); y = clamp(y, CFG.STRIKE_H / 2, H - CFG.STRIKE_H / 2);
   G.strikes.push({ team, x, y, t: CFG.STRIKE_DELAY, beep: 0, dir: team === 0 ? 1 : -1 });
-  const mine = team === G.player.team;
-  message(mine ? `Air strike called. Impact in ${CFG.STRIKE_DELAY} s` : `ENEMY AIR STRIKE INCOMING! Clear the red zone`, mine ? TEAMS[team].color : '#ff5a4e', 4);
+  msgFor(team, `Air strike called. Impact in ${CFG.STRIKE_DELAY} s`, TEAMS[team].color, 4);
+  msgFor(1 - team, 'ENEMY AIR STRIKE INCOMING! Clear the red zone', '#ff5a4e', 4);
   feed(`${TEAMS[team].name} commander called an air strike`, TEAMS[team].color);
   return true;
 }
