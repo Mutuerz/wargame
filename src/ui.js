@@ -13,7 +13,7 @@ const menu = {
   biome: params.get('biome') && BIOMES[params.get('biome')] ? params.get('biome') : 'forest',
   seed: Number(params.get('seed')) || Math.floor(Math.random() * 1e6),
   skill: 1, map: null, art: null,
-  counts: [2, 2, 2, 2, 2], playerSpot: 2,
+  counts: [2, 2, 2, 2, 2], playerSpot: 2, loadout: DEFAULT_LOADOUT.slice(),
 };
 
 // ---------- input
@@ -23,7 +23,12 @@ window.addEventListener('keydown', e => {
   if (e.code === 'Tab' || e.code === 'Space') e.preventDefault();
   keys.add(e.code);
   if (!G || G.over || G.state !== 'play') return;
-  if (e.code === 'Escape') togglePause();
+  if (e.code === 'Escape' && G.targeting) G.targeting = false;
+  else if (e.code === 'Escape') togglePause();
+  else if (e.code === 'KeyB') {
+    if (canStrike(G.player.team)) { G.targeting = !G.targeting; if (G.targeting) message('Click to mark the air strike target. Right click or Esc cancels', '#e6ad45', 3); }
+    else message(G.strikes.some(s => s.team === G.player.team) ? 'An air strike is already on its way' : `Air strike needs ${CFG.STRIKE_COST} team points (you have ${G.teams[G.player.team].points})`, '#8e9b92', 2);
+  }
   else if (e.code === 'KeyR') reloadPressed = true;
   else if (e.code === 'KeyG') throwPressed = true;
   else if (e.code === 'KeyE' && G.player.riding) dismount(G.player.riding, G.player);
@@ -38,6 +43,10 @@ window.addEventListener('keyup', e => { keys.delete(e.code); if (e.code === 'Tab
 window.addEventListener('blur', () => { keys.clear(); mouse.down = false; mouse.right = false; });
 cv.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
 cv.addEventListener('mousedown', e => {
+  if (G && G.targeting && !G.over) {
+    if (e.button === 0) { const w = G.showMap ? mapToWorld(mouse.x, mouse.y) : screenToWorld(e.clientX, e.clientY); if (w) callStrike(G.player.team, w.x, w.y); }
+    G.targeting = false; return;
+  }
   if (G && !G.player.alive && !G.player.riding && !G.over) { G.specIdx += e.button === 2 ? -1 : 1; return; }
   if (e.button === 0) mouse.down = true; if (e.button === 2) mouse.right = true; SFX.init(); });
 window.addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; if (e.button === 2) mouse.right = false; });
@@ -154,6 +163,7 @@ function renderDeploy() {
   });
   const u = unassigned();
   $('unassigned').textContent = u > 0 ? `${u} soldier${u > 1 ? 's' : ''} waiting for orders` : 'All 10 soldiers assigned';
+  renderLoadout();
   $('deployBtn').disabled = u > 0;
   $('deployBtn').textContent = u > 0 ? `Deploy (${u} unassigned)` : 'Deploy';
   drawPreview($('deployMap'), menu.map, menu.art, true);
@@ -183,6 +193,23 @@ $('deployMap').addEventListener('mousedown', e => {
   else changeSpot(best, e.button === 2 ? -1 : 1);
 });
 $('deployMap').addEventListener('contextmenu', e => e.preventDefault());
+function renderLoadout() {
+  const wrap = $('loadout');
+  if (wrap.childElementCount !== CFG.TEAM_SIZE) {
+    wrap.innerHTML = '';
+    for (let i = 0; i < CFG.TEAM_SIZE; i++) {
+      const lab = document.createElement('label');
+      lab.className = i === 0 ? 'me' : '';
+      const sel = document.createElement('select'); sel.id = 'weapon-' + i;
+      for (const k in CLASSES) { const o = document.createElement('option'); o.value = k; o.textContent = CLASSES[k].name; sel.appendChild(o); }
+      sel.onchange = () => { menu.loadout[i] = sel.value; renderLoadout(); };
+      lab.append(document.createTextNode(i === 0 ? 'You' : CALLSIGNS[0][i]), sel, document.createElement('small'));
+      wrap.appendChild(lab);
+    }
+  }
+  [...wrap.children].forEach((lab, i) => { lab.querySelector('select').value = menu.loadout[i]; lab.querySelector('small').textContent = WEAPON_BLURB[menu.loadout[i]]; });
+}
+$('loadoutDefault').onclick = () => { menu.loadout = DEFAULT_LOADOUT.slice(); renderLoadout(); };
 $('spread').onclick = () => { menu.counts = [2, 2, 2, 2, 2]; renderDeploy(); };
 $('clearSpots').onclick = () => { menu.counts = [0, 0, 0, 0, 0]; menu.counts[menu.playerSpot] = 1; renderDeploy(); };
 $('backMenu').onclick = () => show('menu');
@@ -192,7 +219,7 @@ function beginMatch(auto = false) {
   // fresh map instance so bridges and decals reset
   const m = generateMap(menu.biome, menu.seed);
   const art = buildArt(m);
-  startMatch(m, art, menu.counts, menu.playerSpot, { skill: menu.skill, auto, playerClass: params.get('class') });
+  startMatch(m, art, menu.counts, menu.playerSpot, { skill: menu.skill, auto, playerClass: params.get('class'), loadout: menu.loadout.slice() });
   show(null);
   cv.classList.add('playing');
 }

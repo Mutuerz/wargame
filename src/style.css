@@ -123,6 +123,15 @@ input {
 .unassigned { color: var(--accent); font-weight: 600; }
 #deployBtn { flex: 1; padding: 12px; }
 
+.loadout-head { display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; }
+.loadout-head .desc { flex: 1; min-width: 200px; }
+.loadout { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.loadout label { display: flex; flex-direction: column; gap: 4px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 8px; font: 600 13px var(--display); }
+.loadout label.me { border-color: var(--blue); }
+.loadout label small { font: 400 11px var(--mono); color: var(--dim); }
+.loadout select { font: 500 13px var(--mono); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 5px; }
+@media (max-width: 860px) { .loadout { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
 /* Respawn dock */
 .dock { position: fixed; left: 0; right: 0; bottom: 120px; display: flex; justify-content: center; z-index: 4;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }

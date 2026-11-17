@@ -34,7 +34,10 @@ const CFG = {
   GRENADE_FUSE: 5,
   GRENADE_RADIUS: 170,
   GRENADE_DMG: 110,
-  SNIPERS_PER_TEAM: 2,        // randomly chosen each match
+  STRIKE_COST: 500,           // team points needed (and spent) for an air strike
+  STRIKE_DELAY: 10,           // seconds of warning before it hits
+  STRIKE_W: 380, STRIKE_H: 150,   // target rectangle (plane flies along the long side)
+  STRIKE_DMG: 130,
   HEIGHT_MAX: 3,              // terrain levels
   HEIGHT_STEP: 0.25,          // level difference that counts as up/downhill
   DOWNHILL_ACC: 1.1,          // spread divided by this when shooting downhill
@@ -55,7 +58,7 @@ const CFG = {
   VIEW_H: 1000,               // world pixels visible vertically
 };
 
-// Soldier classes. Rifleman is the default; snipers are assigned at random.
+// Weapons / classes. The commander picks one per soldier on the deployment screen.
 const CLASSES = {
   rifleman: {
     name: 'Rifleman', mag: 25, mags: 2, rate: 10, reload: 2.2, reloadEmpty: 2.8, dmg: 15,
@@ -66,7 +69,23 @@ const CLASSES = {
     bulletSpeed: 2600, range: 2200, spread: 0.01, spreadMove: 0.1, speed: 0.95, vision: 950, auto: false,
     scopeRange: 1900, scopeCone: 0.32, scopeSpread: 0.35,
   },
+  smg: {
+    name: 'SMG', mag: 30, mags: 2, rate: 14, reload: 1.8, reloadEmpty: 2.2, dmg: 11,
+    bulletSpeed: 1400, range: 650, spread: 0.06, spreadMove: 0.08, speed: 1.1, vision: 700, auto: true,
+  },
+  lmg: {
+    name: 'Machine gun', mag: 60, mags: 1, rate: 9, reload: 4.5, reloadEmpty: 5, dmg: 16,
+    bulletSpeed: 1500, range: 1150, spread: 0.05, spreadMove: 0.11, speed: 0.85, vision: 750, auto: true,
+  },
 };
+for (const k in CLASSES) CLASSES[k].key = k;
+const WEAPON_BLURB = {
+  rifleman: 'Assault rifle · 25 rds · all-round',
+  sniper: 'Bolt sniper · 5 rds · scope, 75 dmg',
+  smg: 'SMG · 30 rds · fast, short range',
+  lmg: 'Machine gun · 60 rds · slow, long reload',
+};
+const DEFAULT_LOADOUT = ['rifleman', 'rifleman', 'rifleman', 'sniper', 'rifleman', 'smg', 'rifleman', 'sniper', 'lmg', 'smg'];
 
 const SKILLS = [
   { name: 'Recruit', react: [0.45, 0.8], aimErr: [0.28, 0.4], minErr: 0.06, turn: 4.5, range: 800 },

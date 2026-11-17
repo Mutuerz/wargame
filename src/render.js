@@ -39,6 +39,49 @@ function fogLayer() {
   return fogSoft;
 }
 function seen(x, y) { return isVisible(G.player.team, x, y); }
+function bigMapRect() { const w = Math.min(VW - 80, (VH - 120) * W / H), h = w * H / W; return { x: (VW - w) / 2, y: (VH - h) / 2, w, h }; }
+function mapToWorld(sx, sy) {
+  const r = bigMapRect();
+  if (sx < r.x || sy < r.y || sx > r.x + r.w || sy > r.y + r.h) return null;
+  return { x: (sx - r.x) / r.w * W, y: (sy - r.y) / r.h * H };
+}
+function targetWorld() { return G.showMap ? mapToWorld(mouse.x, mouse.y) : screenToWorld(mouse.x, mouse.y); }
+function strikeAt(x, y) {
+  return { x: clamp(x, CFG.STRIKE_W / 2, W - CFG.STRIKE_W / 2) - CFG.STRIKE_W / 2, y: clamp(y, CFG.STRIKE_H / 2, H - CFG.STRIKE_H / 2) - CFG.STRIKE_H / 2, w: CFG.STRIKE_W, h: CFG.STRIKE_H };
+}
+// Announced strike zones are drawn above the fog: both teams see them for the full countdown.
+function drawStrikes(z) {
+  const D = '"Chakra Petch", sans-serif';
+  for (const st of G.strikes) {
+    const r = strikeRect(st), mine = st.team === G.player.team, col = mine ? TEAMS[st.team].color : '#ff3b2f';
+    const pulse = 0.5 + 0.5 * Math.sin(G.time * (st.t < 3 ? 18 : 7));
+    ctx.fillStyle = col; ctx.globalAlpha = 0.12 + 0.12 * pulse; ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.globalAlpha = 1; ctx.strokeStyle = col; ctx.lineWidth = 3 / z;
+    ctx.setLineDash([18 / z, 10 / z]); ctx.lineDashOffset = -G.time * 40 / z; ctx.strokeRect(r.x, r.y, r.w, r.h); ctx.setLineDash([]);
+    // hazard corners
+    ctx.lineWidth = 6 / z; const c = 26;
+    for (const [cx, cy, sx, sy] of [[r.x, r.y, 1, 1], [r.x + r.w, r.y, -1, 1], [r.x, r.y + r.h, 1, -1], [r.x + r.w, r.y + r.h, -1, -1]]) {
+      ctx.beginPath(); ctx.moveTo(cx + sx * c, cy); ctx.lineTo(cx, cy); ctx.lineTo(cx, cy + sy * c); ctx.stroke();
+    }
+    ctx.font = `700 ${Math.round(34 / Math.sqrt(z))}px ${D}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = 4;
+    const label = st.t > 0 ? `AIR STRIKE  ${Math.ceil(st.t)}` : 'IMPACT';
+    ctx.strokeText(label, st.x, st.y); ctx.fillText(label, st.x, st.y);
+    // bomber shadow passing over during the run
+    if (st.t <= 0.8) {
+      const prog = clamp((0.8 - st.t) / 1.6, 0, 1), px = st.dir > 0 ? r.x - 400 + (r.w + 800) * prog : r.x + r.w + 400 - (r.w + 800) * prog;
+      ctx.save(); ctx.translate(px, st.y - 30); ctx.scale(st.dir, 1); ctx.globalAlpha = 0.35; ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.moveTo(60, 0); ctx.lineTo(-40, -8); ctx.lineTo(-10, -70); ctx.lineTo(-30, -70); ctx.lineTo(-60, -8); ctx.lineTo(-80, -6); ctx.lineTo(-95, -30); ctx.lineTo(-105, -30); ctx.lineTo(-100, 0);
+      ctx.lineTo(-105, 30); ctx.lineTo(-95, 30); ctx.lineTo(-80, 6); ctx.lineTo(-60, 8); ctx.lineTo(-30, 70); ctx.lineTo(-10, 70); ctx.lineTo(-40, 8); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+  }
+  if (G.targeting && !G.showMap && typeof mouse !== 'undefined') {
+    const w = screenToWorld(mouse.x, mouse.y), r = strikeAt(w.x, w.y);
+    ctx.fillStyle = 'rgba(230,173,69,0.16)'; ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.strokeStyle = '#e6ad45'; ctx.lineWidth = 2 / z; ctx.setLineDash([12 / z, 8 / z]); ctx.strokeRect(r.x, r.y, r.w, r.h); ctx.setLineDash([]);
+  }
+}
 function screenToWorld(sx, sy) { const z = zoom(); return { x: G.cam.x + (sx - VW / 2) / z, y: G.cam.y + (sy - VH / 2) / z }; }
 
 function render(dt) {
@@ -91,6 +134,7 @@ function render(dt) {
   // fog of war: dim what your team cannot currently see
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(fogLayer(), 0, 0, W, H);
+  drawStrikes(z);
   drawParticles();
 
   // screen space
@@ -486,10 +530,19 @@ function drawHUD() {
     ctx.stroke();
     if (P.reloading) { ctx.strokeStyle = '#e6ad45'; ctx.beginPath(); ctx.arc(mouse.x, mouse.y, gapPx + 14, -Math.PI / 2, -Math.PI / 2 + TAU * (1 - P.reloadT / P.reloadMax)); ctx.stroke(); }
   }
+  // air strike status
+  const myT = G.teams[P.team];
+  if (G.targeting) txt(`AIR STRIKE: click to mark the target${G.showMap ? '' : ' (M to aim on the map)'} · Esc cancels`, VW / 2, VH - 180, `700 16px ${D}`, '#e6ad45', 'center');
+  else if (!G.auto && canStrike(P.team)) txt('B  AIR STRIKE READY', 24, by - 28, `700 12px ${D}`, '#e6ad45');
+  else if (!G.auto && !G.strikes.some(s => s.team === P.team)) txt(`Air strike at ${CFG.STRIKE_COST} pts`, 24, by - 28, `500 11px ${M}`, '#5d665f');
   if (G.showMap) {
-    const w = Math.min(VW - 80, (VH - 120) * W / H), h = w * H / W;
+    const r = bigMapRect();
     ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, VW, VH);
-    drawMap(ctx, (VW - w) / 2, (VH - h) / 2, w, h, true);
+    drawMap(ctx, r.x, r.y, r.w, r.h, true);
+    if (G.targeting) {
+      const w = mapToWorld(mouse.x, mouse.y);
+      if (w) { const sr = strikeAt(w.x, w.y), s = r.w / W; ctx.strokeStyle = '#e6ad45'; ctx.lineWidth = 2; ctx.strokeRect(r.x + sr.x * s, r.y + sr.y * s, sr.w * s, sr.h * s); }
+    }
   }
   if (G.showScores) drawScores();
 }
@@ -515,6 +568,10 @@ function drawMap(c, x, y, w, h, big) {
   for (const d of G.drops) { c.fillStyle = '#7fd18b'; c.fillRect(x + d.x * s - 3, y + d.y * s - 3, 6, 6); }
   for (const t of G.trucks) { if (t.team !== P.team && !seen(t.x, t.y)) continue; c.fillStyle = TEAMS[t.team].light; c.fillRect(x + t.x * s - 4, y + t.y * s - 3, 8, 6); }
   for (const k of G.carts) { if (k.team !== P.team && !seen(k.x, k.y)) continue; c.fillStyle = TEAMS[k.team].light; c.fillRect(x + k.x * s - 4, y + k.y * s - 4, 8, 8); c.strokeStyle = '#000'; c.strokeRect(x + k.x * s - 4, y + k.y * s - 4, 8, 8); }
+  for (const st of G.strikes) {
+    const r = strikeRect(st); c.globalAlpha = 0.35 + 0.35 * Math.sin(G.time * 8); c.fillStyle = st.team === P.team ? TEAMS[st.team].color : '#ff3b2f';
+    c.fillRect(x + r.x * s, y + r.y * s, Math.max(4, r.w * s), Math.max(3, r.h * s)); c.globalAlpha = 1;
+  }
   for (const k of G.c4s) { if (Math.sin(G.time * 12) > 0) { c.fillStyle = '#ff3b2f'; circle(c, x + k.x * s, y + k.y * s, 5); } }
   for (const so of G.soldiers) {
     if (!so.alive) continue;

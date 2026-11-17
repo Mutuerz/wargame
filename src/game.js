@@ -30,6 +30,12 @@ function botCommanderCounts() {
   return pickRand(patterns).slice();
 }
 
+// Bot commander loadout: mostly rifles with a mix of specialists.
+function botLoadout() {
+  const pool = ['rifleman', 'rifleman', 'rifleman', 'rifleman', 'sniper', 'sniper', 'smg', 'smg', 'lmg', pickRand(['rifleman', 'smg', 'lmg'])];
+  return pool.sort(() => Math.random() - 0.5);
+}
+
 function startMatch(m, art, counts, playerSpot, opts = {}) {
   G = {
     m, art, time: 0, state: 'play', paused: false, over: false, winner: -1,
@@ -40,7 +46,7 @@ function startMatch(m, art, counts, playerSpot, opts = {}) {
       { points: 0, supplyT: CFG.SUPPLY_INTERVAL, sapperT: 100 + Math.random() * 40, counts: botCommanderCounts(), vis: new Uint8Array(GW * GH) },
     ],
     lock: { team: -1, t: 0 }, holdT: 0, dropT: CFG.DROP_INTERVAL, pathBudget: 0, cam: { x: 0, y: 0, shake: 0 }, hurtT: 0, hitT: 0,
-    grenades: [], carts: [], specIdx: 0, visT: 0, smokers: [],
+    grenades: [], carts: [], strikes: [], targeting: false, specIdx: 0, visT: 0, smokers: [],
     stats: { captures: [0, 0], bridges: [false, false] },
   };
   for (let t = 0; t < 2; t++) {
@@ -50,11 +56,11 @@ function startMatch(m, art, counts, playerSpot, opts = {}) {
       const pi = list.indexOf(playerSpot); if (pi >= 0) list.splice(pi, 1);
       list.unshift(playerSpot);
     }
-    const snipers = new Set();
-    while (snipers.size < CFG.SNIPERS_PER_TEAM) snipers.add(Math.floor(Math.random() * CFG.TEAM_SIZE));
+    const loadout = t === 0 ? (opts.loadout || DEFAULT_LOADOUT) : botLoadout();
     for (let i = 0; i < CFG.TEAM_SIZE; i++) {
       const s = makeSoldier(t, i, t === 0 && i === 0);
-      if (snipers.has(i) || (t === 0 && i === 0 && opts.playerClass === 'sniper')) s.cls = CLASSES.sniper;
+      s.cls = CLASSES[loadout[i]] || CLASSES.rifleman;
+      if (t === 0 && i === 0 && CLASSES[opts.playerClass]) s.cls = CLASSES[opts.playerClass];
       s.spot = list[i] ?? (i % 5);
       G.soldiers.push(s);
       spawnSoldier(s, { type: 'base', idx: s.spot });
@@ -319,6 +325,9 @@ function update(dt) {
   updateSupply(dt);
   updateGrenades(dt);
   updateCarts(dt);
+  updateStrikes(dt);
+  G.cmdT = (G.cmdT || 0) - dt;
+  if (G.cmdT <= 0) { G.cmdT = 1; botCommanderStrike(1); if (G.auto) botCommanderStrike(0); }
   G.visT -= dt;
   if (G.visT <= 0) { G.visT = 0.15; computeVision(G.player.team); }
   updateDrops(dt);
@@ -714,4 +723,80 @@ function updateCarts(dt) {
       if (ed < min && ed > 0.1) { s.x = c.x + ex / ed * min; s.y = c.y + ey / ed * min; }
     }
   }
+}
+
+// ---------------- Air strikes (commander ability)
+function strikeRect(st) { return { x: st.x - CFG.STRIKE_W / 2, y: st.y - CFG.STRIKE_H / 2, w: CFG.STRIKE_W, h: CFG.STRIKE_H }; }
+function inStrike(st, x, y, pad = 0) { const r = strikeRect(st); return x > r.x - pad && x < r.x + r.w + pad && y > r.y - pad && y < r.y + r.h + pad; }
+function canStrike(team) { return G.teams[team].points >= CFG.STRIKE_COST && !G.strikes.some(s => s.team === team); }
+function callStrike(team, x, y) {
+  if (!canStrike(team)) return false;
+  G.teams[team].points -= CFG.STRIKE_COST;
+  x = clamp(x, CFG.STRIKE_W / 2, W - CFG.STRIKE_W / 2); y = clamp(y, CFG.STRIKE_H / 2, H - CFG.STRIKE_H / 2);
+  G.strikes.push({ team, x, y, t: CFG.STRIKE_DELAY, beep: 0, dir: team === 0 ? 1 : -1 });
+  const mine = team === G.player.team;
+  message(mine ? `Air strike called. Impact in ${CFG.STRIKE_DELAY} s` : `ENEMY AIR STRIKE INCOMING! Clear the red zone`, mine ? TEAMS[team].color : '#ff5a4e', 4);
+  feed(`${TEAMS[team].name} commander called an air strike`, TEAMS[team].color);
+  return true;
+}
+function updateStrikes(dt) {
+  for (const st of G.strikes.slice()) {
+    st.t -= dt; st.beep -= dt;
+    if (st.beep <= 0 && st.t > 0) { st.beep = st.t < 3 ? 0.35 : 1; SFX.beep(st.x, st.y); }
+    if (st.t > 0) continue;
+    // a run of bombs along the rectangle
+    if (st.drop === undefined) { st.drop = 0; st.dropT = 0; SFX.boom(st.x, st.y); }
+    st.dropT -= dt;
+    if (st.dropT > 0) continue;
+    const n = 5, r = strikeRect(st);
+    const bx = r.x + r.w * ((st.dir > 0 ? st.drop : n - 1 - st.drop) + 0.5) / n, by = st.y + rand(-r.h * 0.2, r.h * 0.2);
+    bombAt(st, bx, by);
+    st.drop++; st.dropT = 0.12;
+    if (st.drop >= n) {
+      // anything still inside the rectangle takes the full hit
+      for (const s of G.soldiers) if (s.alive && inStrike(st, s.x, s.y, CFG.R)) damage(s, CFG.STRIKE_DMG, st.caller || null);
+      for (const c of G.carts.slice()) if (inStrike(st, c.x, c.y, CFG.CART_R)) damageCart(c, CFG.STRIKE_DMG * 2, null);
+      const rr = strikeRect(st);
+      breakWallsRect(rr);
+      G.strikes.splice(G.strikes.indexOf(st), 1);
+    }
+  }
+}
+function bombAt(st, x, y) {
+  stampScorch(G.art, x, y, 45);
+  for (let i = 0; i < 18; i++) { const a = Math.random() * TAU, sp = rand(60, 320); G.particles.push({ type: 'fire', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.3, 0.7), max: 0.7, size: rand(6, 14) }); }
+  for (let i = 0; i < 10; i++) { const a = Math.random() * TAU; G.particles.push({ type: 'smoke', x: x + rand(-20, 20), y: y + rand(-20, 20), vx: Math.cos(a) * 40, vy: Math.sin(a) * 40, life: rand(2, 4), max: 4, size: rand(20, 40) }); }
+  SFX.boom(x, y);
+  const pd = dist(x, y, G.cam.x, G.cam.y);
+  if (pd < 1400) G.cam.shake = Math.max(G.cam.shake, 14 * (1 - pd / 1400));
+}
+function breakWallsRect(r) {
+  const m = G.m, hit = [];
+  forBlockersNear(m, r.x, r.y, r.x + r.w, r.y + r.h, o => {
+    if (o.breakable && o.x < r.x + r.w && o.x + o.w > r.x && o.y < r.y + r.h && o.y + o.h > r.y) hit.push(o);
+  });
+  if (!hit.length) return;
+  const gone = new Set(hit);
+  m.solids = m.solids.filter(o => !gone.has(o));
+  for (const o of hit) stampRubble(G.art, o);
+  buildGrids(m);
+  for (const s of G.soldiers) if (s.bot) s.bot.path = null;
+}
+// Red's commander: once it can afford a strike, it targets the biggest group of Blue soldiers it can see.
+function botCommanderStrike(team) {
+  if (!canStrike(team)) return;
+  const tm = G.teams[team];
+  tm.strikeT = (tm.strikeT ?? rand(5, 20)) - 1;   // called once per second
+  if (tm.strikeT > 0) return;
+  let best = null, bn = 0;
+  const foes = G.soldiers.filter(s => s.alive && s.team !== team && G.time - s.spotted[team] < 2);
+  for (const f of foes) {
+    const n = foes.filter(o => Math.abs(o.x - f.x) < CFG.STRIKE_W / 2 && Math.abs(o.y - f.y) < CFG.STRIKE_H / 2).length;
+    const friends = G.soldiers.filter(o => o.alive && o.team === team && Math.abs(o.x - f.x) < CFG.STRIKE_W / 2 + 60 && Math.abs(o.y - f.y) < CFG.STRIKE_H / 2 + 60).length;
+    if (n - friends * 2 > bn) { bn = n - friends * 2; best = f; }
+  }
+  // prefers a group of two or more; after waiting a while it settles for a lone target
+  tm.strikeWait = (tm.strikeWait || 0) + 1;
+  if (best && (bn >= 2 || (bn >= 1 && tm.strikeWait > 6))) { callStrike(team, best.x, best.y); tm.strikeT = undefined; tm.strikeWait = 0; }
+  else tm.strikeT = rand(2, 5);
 }

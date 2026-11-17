@@ -210,6 +210,12 @@ function botThink(s, dt) {
     const dx = s.x - g.x, dy = s.y - g.y, d = Math.hypot(dx, dy) || 1;
     if (d < CFG.GRENADE_RADIUS + 40 && g.fuse < 3.5) { moveX = dx / d; moveY = dy / d; ctl.sprint = true; ctl.scope = false; ctl.interact = false; }
   }
+  // clear out of announced air strike zones (both sides can see the marker)
+  for (const st of G.strikes) {
+    if (st.t > 8 || !inStrike(st, s.x, s.y, 50)) continue;
+    const dy = s.y >= st.y ? 1 : -1;
+    moveX = 0; moveY = dy; ctl.sprint = true; ctl.scope = false; ctl.interact = false;
+  }
   if (b.nudgeT > 0) { b.nudgeT -= dt; moveX = Math.cos(b.nudgeA); moveY = Math.sin(b.nudgeA); }
 
   // spread out from nearby allies
