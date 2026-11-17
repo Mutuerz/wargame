@@ -153,6 +153,7 @@ function drawPoints(m) {
 
 function drawDepots(m) {
   for (const c of G.caches) {
+    if (c.team !== G.player.team && !seen(c.x, c.y)) continue;
     for (let i = 0; i < Math.min(6, Math.ceil(c.charges / 2)); i++) {
       const x = c.x - 45 + (i % 3) * 32, y = c.y - 10 + Math.floor(i / 3) * 32;
       ctx.fillStyle = '#4f6b3a'; ctx.fillRect(x, y, 28, 28);

@@ -469,12 +469,12 @@ function updateSupply(dt) {
       if ((tr.dir > 0 && tr.x >= lane.to) || (tr.dir < 0 && tr.x <= lane.to)) {
         tr.x = lane.to; tr.state = 'unload'; tr.t = 4;
         const d = m.depots[tr.team];
-        let c = G.caches.find(c => c.team === tr.team);
+        let c = G.caches.find(c => c.team === tr.team && c.depot);
         if (c) c.charges = Math.min(c.charges + CFG.CACHE_CHARGES, CFG.CACHE_MAX);
-        else G.caches.push({ team: tr.team, x: d.x, y: d.y, charges: CFG.CACHE_CHARGES });
+        else G.caches.push({ team: tr.team, x: d.x, y: d.y, charges: CFG.CACHE_CHARGES, depot: true });
         // reinforcements board a transport cart to the front
         const riders = G.soldiers.filter(so => so.team === tr.team && !so.alive && !so.riding);
-        if (riders.length) launchCart(tr.team, riders);
+        launchCart(tr.team, riders);   // the cart always runs: it also carries supplies to the front
       }
     } else if (tr.state === 'unload') {
       tr.t -= dt; if (tr.t <= 0) { tr.state = 'out'; tr.dir = -tr.dir; }
@@ -652,9 +652,17 @@ function launchCart(team, riders) {
   for (const r of riders) r.riding = cart;
   G.carts.push(cart);
   if (!path) { dismount(cart); return; }
-  if (team === G.player.team) feed(`Transport with ${riders.length} soldier${riders.length > 1 ? 's' : ''} heading to ${tgt.name}`, TEAMS[team].color);
+  if (team === G.player.team) feed(riders.length ? `Transport with ${riders.length} soldier${riders.length > 1 ? 's' : ''} and supplies heading to ${tgt.name}` : `Supply cart heading to ${tgt.name}`, TEAMS[team].color);
+}
+function dropFieldCache(cart) {
+  if (cart.dropped) return;
+  cart.dropped = true;
+  const near = G.caches.find(c => c.team === cart.team && !c.depot && dist(c.x, c.y, cart.x, cart.y) < 200);
+  if (near) near.charges = Math.min(near.charges + CFG.FIELD_CACHE, CFG.FIELD_CACHE * 2);
+  else { const f = randomFreeNear(G.m, cart.x, cart.y, 50); G.caches.push({ team: cart.team, x: f.x, y: f.y, charges: CFG.FIELD_CACHE }); }
 }
 function dismount(cart, only) {
+  if (!only) dropFieldCache(cart);
   const list = only ? [only] : cart.riders;
   for (const r of list) {
     r.riding = null;
@@ -662,7 +670,7 @@ function dismount(cart, only) {
     r.shield = CFG.SPAWN_SHIELD;
   }
   cart.riders = cart.riders.filter(r => !list.includes(r));
-  if (!cart.riders.length) cart.empty = true;
+  if (!cart.riders.length && cart.dropped) cart.empty = true;
 }
 function damageCart(c, amount, attacker) {
   if (!c.alive) return;

@@ -22,6 +22,7 @@ const CFG = {
   SUPPLY_INTERVAL: 60,        // a truck every minute: ammo, health and reinforcements
   TRUCK_SPEED: 170,
   CACHE_CHARGES: 6,
+  FIELD_CACHE: 4,             // resupplies the cart leaves at the point it reaches
   CART_HP: 350,               // transport cart: carries reinforcements from the depot to the front
   CART_R: 28,
   CART_SPEED: 160,
