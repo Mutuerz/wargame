@@ -4,9 +4,18 @@
 // same real-world scale with no UV seams), used two ways:
 //   colour: a little darker and lighter grain, plus a large-scale variation that breaks up repeats;
 //   relief: the same noise as a height bump, so light catches tiny ridges (derivative bump mapping).
-// All of it is generated here at load time: no downloaded textures, nothing to license.
+// The detail noise is generated here at load time; the terrain also blends in a per-theatre color map from
+// assets/textures/ (see that folder's README).
 
-const SURF = { tex: null, on: true };
+const SURF = { tex: null, on: true, ground: {} };
+
+const GROUND_TEXTURES = { forest: 'grass', desert: 'sand', urban: 'sand', snow: 'snow', swamp: 'swamp' };
+function groundAlbedo(biome) {
+  const name = GROUND_TEXTURES[biome];
+  if (!name) return null;
+  if (!SURF.ground[name]) SURF.ground[name] = assetTexture(name);
+  return SURF.ground[name];
+}
 
 function surfNoiseTexture(size = 256) {
   // periodic value-noise fBm, so the texture tiles seamlessly
@@ -36,7 +45,11 @@ function addSurfaceDetail(mat, opts = {}) {
   if (!SURF.on || !mat || mat.userData.surf || !(mat.isMeshLambertMaterial || mat.isMeshStandardMaterial) || mat.transparent) return;
   if (!SURF.tex) SURF.tex = surfNoiseTexture();
   mat.userData.surf = true;
-  const u = { surfTex: { value: SURF.tex }, surfK: { value: new THREE.Vector3(opts.strength ?? 0.32, opts.bump ?? 0.9, 1 / (opts.scale ?? 70)) } };
+  const u = {
+    surfTex: { value: SURF.tex },
+    surfAlbedoTex: { value: opts.albedo || SURF.tex },
+    surfK: { value: new THREE.Vector4(opts.strength ?? 0.32, opts.bump ?? 0.9, 1 / (opts.scale ?? 70), opts.albedoStrength ?? 0) },
+  };
   mat.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, u);
     sh.vertexShader = sh.vertexShader
@@ -49,17 +62,23 @@ function addSurfaceDetail(mat, opts = {}) {
           sw = modelMatrix * sw; vSurfW = sw.xyz; vSurfN = normalize(mat3(modelMatrix) * sn); }`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
-        uniform sampler2D surfTex; uniform vec3 surfK; varying vec3 vSurfW; varying vec3 vSurfN;
+        uniform sampler2D surfTex; uniform sampler2D surfAlbedoTex; uniform vec4 surfK; varying vec3 vSurfW; varying vec3 vSurfN;
         float surfH(vec3 p, vec3 n) {
           vec3 w = pow(abs(n), vec3(4.0)); w /= (w.x + w.y + w.z + 1e-4);
           vec3 q = p * surfK.z;
           return texture2D(surfTex, q.zy).r * w.x + texture2D(surfTex, q.xz).r * w.y + texture2D(surfTex, q.xy).r * w.z;
         }
+        vec3 surfAlbedo(vec3 p, vec3 n) {
+          vec3 w = pow(abs(n), vec3(4.0)); w /= (w.x + w.y + w.z + 1e-4);
+          vec3 q = p * surfK.z;
+          return texture2D(surfAlbedoTex, q.zy).rgb * w.x + texture2D(surfAlbedoTex, q.xz).rgb * w.y + texture2D(surfAlbedoTex, q.xy).rgb * w.z;
+        }
         float surfBig(vec3 p) { return texture2D(surfTex, p.xz * 0.0011).r; }`)
       .replace('#include <map_fragment>', `#include <map_fragment>
         float sH = surfH(vSurfW, vSurfN);
         diffuseColor.rgb *= 1.0 + (sH - 0.5) * 2.0 * surfK.x;
-        diffuseColor.rgb *= 0.9 + 0.2 * surfBig(vSurfW);`)
+        diffuseColor.rgb *= 0.9 + 0.2 * surfBig(vSurfW);
+        diffuseColor.rgb *= mix(vec3(1.0), surfAlbedo(vSurfW, vSurfN), surfK.w);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         { // derivative bump from the same detail height
           vec2 dH = vec2(dFdx(sH), dFdy(sH)) * surfK.y * 4.0;
@@ -75,11 +94,11 @@ function addSurfaceDetail(mat, opts = {}) {
 }
 
 // After the world is built: give its solid surfaces detail. The terrain gets a finer, stronger grain.
-function surfaceWorld(world, terrain) {
+function surfaceWorld(world, terrain, biome) {
   if (!SURF.on) return;
   world.traverse(o => {
     if (!o.isMesh || !o.material || Array.isArray(o.material)) return;
-    if (o === terrain) addSurfaceDetail(o.material, { strength: 0.42, bump: 1.4, scale: 46 });
+    if (o === terrain) addSurfaceDetail(o.material, { strength: 0.42, bump: 1.4, scale: 62, albedo: groundAlbedo(biome), albedoStrength: 0.55 });
     else addSurfaceDetail(o.material, { strength: 0.26, bump: 0.55, scale: 60 });
   });
 }
