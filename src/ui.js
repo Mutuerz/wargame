@@ -22,6 +22,8 @@ function isTyping() { const a = document.activeElement; return a && a.tagName ==
 window.addEventListener('keydown', e => {
   if (isTyping()) return;
   if (e.code === 'Tab' || e.code === 'Space' || ((e.code === 'ControlLeft' || e.code === 'ControlRight') && G && !G.over)) e.preventDefault();
+  // in a match, Ctrl+R (crouch + reload), F5 and Ctrl+W/S/D/F/G must not reach the browser
+  if (G && !G.over && (e.code === 'F5' || ((e.ctrlKey || e.metaKey) && /^Key[RWSDFGEQAC]$/.test(e.code)))) e.preventDefault();
   keys.add(e.code);
   if (!G || G.over || G.state !== 'play') return;
   if (e.code === 'Escape' && G.targeting) { G.targeting = false; if (G.mapForStrike) { G.showMap = false; G.mapForStrike = false; } }
@@ -439,7 +441,7 @@ function recoilFrame(dt) {
   // scope sway: through the sniper scope the aim itself drifts in a slow, uneven figure-eight (you have to time the
   // shot or correct with the mouse). It builds up over half a second after scoping in; crouching halves it.
   RC.swT = P.scoped ? Math.min(1, (RC.swT || 0) + dt / 0.5) : 0;
-  const amp = CFG.SCOPE_SWAY * RC.swT * (P.crouch ? 0.5 : 1), t = now;
+  const amp = CFG.SCOPE_SWAY * RC.swT * (P.crouch ? 0.4 : 1), t = now;
   const sx = amp * (Math.sin(t * 1.1) * 0.7 + Math.sin(t * 2.3 + 1.7) * 0.3), sy = amp * (Math.sin(t * 2.2 + 0.5) * 0.45 + Math.sin(t * 0.7 + 2.1) * 0.35);
   look.yaw += sx - (RC.sx || 0); look.pitch = clamp(look.pitch + sy - (RC.sy || 0), -1.45, 1.45);
   RC.sx = sx; RC.sy = sy;
@@ -468,6 +470,7 @@ function frame(now) {
     G.wasAlive = P.alive;
   }
   if (G && !G.paused) recoilFrame(dt);
+  finalCountdown();
   try { render(dt); } catch (e) { console.error(e); }
   if (G) updateRespawnDock();
   requestAnimationFrame(frame);

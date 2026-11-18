@@ -220,6 +220,8 @@ function drawHUD() {
     const moving = Math.hypot(P.vx, P.vy) > 20, mx = VW / 2, my = VH / 2;
     const sp = currentSpread(P, moving);
     const gapPx = 4 + sp * pxPerRad();
+    const noX = !!P.cls.hipSpread && !P.scoped;   // sniper from the hip: no crosshair at all, you guess
+    if (!noX) {
     ctx.strokeStyle = G.hitT > 0 ? '#ff5a4e' : 'rgba(255,255,255,0.9)'; ctx.lineWidth = 2;
     ctx.globalAlpha = P.ads ? 0.25 : 1;   // the sights do the aiming
     ctx.beginPath();
@@ -232,12 +234,28 @@ function drawHUD() {
     if (P.steady) {   // the next shot goes exactly where the dot is
       ctx.strokeStyle = 'rgba(127,209,139,0.95)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(mx, my, 3.5, 0, TAU); ctx.stroke();
     }
+    }
     if (G.hitT > 0) {   // hit marker (bigger for headshots)
       const k = (G.headT || 0) > 0 ? 13 : 9;
       ctx.strokeStyle = (G.headT || 0) > 0 ? '#ffd27a' : '#ffffff'; ctx.lineWidth = 2; ctx.beginPath();
       for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { ctx.moveTo(mx + sx * 4, my + sy * 4); ctx.lineTo(mx + sx * k, my + sy * k); }
       ctx.stroke();
     }
+    // shotgun: a small mark where each pellet struck (yellow on the head), popping in and fading out
+    if (G.pelHits && G.pelHits.length && R3.ok) {
+      const v3 = new THREE.Vector3();
+      ctx.lineWidth = 2;
+      for (const h of G.pelHits) {
+        v3.set(h.x, h.z, h.y).project(cam3);
+        if (v3.z > 1 || Math.abs(v3.x) > 1.1 || Math.abs(v3.y) > 1.1) continue;
+        const sx = (v3.x + 1) / 2 * VW, sy = (1 - v3.y) / 2 * VH, a = Math.min(1, h.t / 0.25), k = 3 + (0.5 - h.t) * 6;
+        ctx.globalAlpha = a; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(sx - k, sy - k); ctx.lineTo(sx + k, sy + k); ctx.moveTo(sx + k, sy - k); ctx.lineTo(sx - k, sy + k); ctx.stroke();
+        ctx.strokeStyle = h.head ? '#ffd27a' : '#ffffff'; ctx.lineWidth = 2; ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
     if (P.reloading) { ctx.strokeStyle = '#e6ad45'; ctx.beginPath(); ctx.arc(mx, my, gapPx + 14, -Math.PI / 2, -Math.PI / 2 + TAU * (1 - P.reloadT / P.reloadMax)); ctx.stroke(); }
     if (P.z > 2) txt(P.z >= CFG.FLOOR_H - 1 ? 'UPPER FLOOR' : 'STAIRS', 312, VH - 116 - 20, `600 11px ${D}`, '#b4d8ff', 'right');
   }

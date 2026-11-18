@@ -69,7 +69,7 @@ const CFG = {
   TWO_STOREY: 0.67,           // share of houses that get an upper floor
   FOV: 75,                    // camera field of view (degrees)
   SCOPE_ZOOM: 5,              // sniper scope magnification
-  SCOPE_SWAY: 0.009,          // radians the scoped aim wobbles (crouched: half)
+  SCOPE_SWAY: 0.013,          // radians the scoped aim wobbles (crouched: 40%)
   SENS: 0.0022,               // mouse look sensitivity (radians per pixel)
   RECOIL_BACK: 0.55,          // share of the recoil climb the aim drifts back down after you stop firing
   V_SPREAD: 0.6,              // vertical spread relative to horizontal
@@ -77,7 +77,7 @@ const CFG = {
   ADS_SPEED: 0.6,             // movement speed while aiming down the sights
   ADS_ZOOM: 1.35,             // camera zoom while aiming down the sights
   SWITCH_T: 0.45,             // seconds to swap between the main weapon (1) and the sidearm (2)
-  STEADY_T: 2,                // seconds without shooting or moving before the next shot is dead accurate again
+  STEADY_T: 1,                // seconds standing still without shooting before the next shot is dead accurate (moving cancels it)
   CROUCH_ACC: 1.2,            // crouching (Ctrl) divides spread by this; you cannot move while crouched
   CROUCH_EYE: 19, CROUCH_BODY: 25, CROUCH_HEAD: 18,
   CAP_AMMO: 2,                // an ammo crate for this many soldiers appears on a point when it is captured
@@ -108,19 +108,23 @@ const CLASSES = {
   rifleman: {
     name: 'Rifleman', mag: 25, mags: 2, rate: 10, reload: 2.2, reloadEmpty: 2.8, dmg: 15,
     bulletSpeed: 2250, range: 1500, spread: 0.0175, spreadMove: 0.035, speed: 1, vision: 1300, auto: true, recoil: [0.0165, 0.0075, 0.00225],
+    falloff: [500, 1400, 0.75],   // damage: full up to 500, down to 75% at 1400
   },
   sniper: {
     name: 'Sniper', mag: 5, mags: 3, rate: 0.9, reload: 3.0, reloadEmpty: 3.4, dmg: 75,
     bulletSpeed: 3900, range: 3120, spread: 0.005, spreadMove: 0.05, speed: 0.95, vision: 1300, auto: false, recoil: [0.105, 0.018, 0.0],
     scopeRange: 2400, scopeCone: 0.32, scopeSpread: 0.35,
+    hipSpread: 0.13,              // not scoped: no crosshair and a very wide cone (no damage drop for the sniper)
   },
   smg: {
     name: 'SMG', mag: 30, mags: 2, rate: 14, reload: 1.8, reloadEmpty: 2.2, dmg: 11,
     bulletSpeed: 2100, range: 840, spread: 0.03, spreadMove: 0.04, speed: 1.1, vision: 1300, auto: true, recoil: [0.012, 0.0105, -0.0015],
+    falloff: [250, 800, 0.6],     // SMG hits hurt less from afar: 60% at 800
   },
   lmg: {
     name: 'Machine gun', mag: 60, mags: 1, rate: 9, reload: 4.5, reloadEmpty: 5, dmg: 16,
     bulletSpeed: 2250, range: 1560, spread: 0.025, spreadMove: 0.055, speed: 0.85, vision: 1300, auto: true, recoil: [0.0135, 0.009, 0.003],
+    falloff: [550, 1500, 0.75],
   },
   // Pump shotgun: 9 pellets in a wide cone. Point blank one shot kills; damage fades past ~110 px and the pellets stop at 560.
   shotgun: {
@@ -134,6 +138,7 @@ for (const k in CLASSES) CLASSES[k].key = k;
 const SIDEARM = {
   key: 'pistol', name: 'Machine pistol', mag: 8, mags: 4, rate: 13, reload: 1.4, reloadEmpty: 1.7, dmg: 11,
   bulletSpeed: 1950, range: 780, spread: 0.025, spreadMove: 0.035, speed: 1, vision: 1300, auto: true, recoil: [0.021, 0.0135, 0.0],
+  falloff: [200, 700, 0.6],
 };
 const weaponByKey = k => CLASSES[k] || (k === SIDEARM.key ? SIDEARM : null);
 const WEAPON_BLURB = {

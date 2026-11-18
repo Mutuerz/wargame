@@ -41,10 +41,12 @@ shoot = function (s, moving) {
   }
 };
 const _damage = damage;
-damage = function (target, amount, attacker) {
-  const before = target.hp, wasAlive = target.alive;
-  _damage(target, amount, attacker);
-  if (wasAlive && target.hp < before) emit('a', ['hit', target.id, attacker ? attacker.id : -1, r1(target.x), r1(target.y)]);
+damage = function (target, amount, attacker, head) {
+  const before = target.hp, wasAlive = target.alive, hp = HITPT;
+  _damage(target, amount, attacker, head);
+  if (wasAlive && target.hp < before) emit('a', hp && hp.pel
+    ? ['hit', target.id, attacker ? attacker.id : -1, r1(target.x), r1(target.y), r1(hp.x), r1(hp.y), r1(hp.z), hp.head ? 1 : 0]
+    : ['hit', target.id, attacker ? attacker.id : -1, r1(target.x), r1(target.y)]);
 };
 const _destroyBridge = destroyBridge;
 destroyBridge = function (team, attacker) {

@@ -3,7 +3,7 @@
 // simpler gunMesh in render3d.js). Units: the gun is about 1 long, -z points forward, y up, x right. The sight
 // line sits at y = VM_SIGHT so aiming down the sights lines it up with the crosshair.
 
-const VM_SIGHT = 0.207;
+let VM_SIGHT = 0.207;   // per gun: the LMG sits its optic higher, on a riser over the feed cover
 const VMX = {};   // shared textures and materials, made once
 
 function vmCanvas(w, h, draw) {
@@ -70,7 +70,7 @@ function vmInit() {
     brass: std('#b98d3e', 1, 0.3),
     shell: std('#9b1f1a', 0.1, 0.45),
     lens: new THREE.MeshStandardMaterial({ color: '#0d2233', metalness: 1, roughness: 0.05, emissive: '#06121c' }),
-    glass: new THREE.MeshStandardMaterial({ color: '#88c8d8', metalness: 0.3, roughness: 0.05, transparent: true, opacity: 0.18, depthWrite: false }),
+    glass: new THREE.MeshStandardMaterial({ color: '#88c8d8', metalness: 0.3, roughness: 0.05, transparent: true, opacity: 0.06, depthWrite: false }),
     glove: std('#5a5146', 0, 0.92, { bumpMap: VMX.fabric, bumpScale: 0.003 }),
     leather: std('#2a2520', 0.05, 0.7),
   };
@@ -145,7 +145,8 @@ function vmRifle(g, M) {
   vmCyl(g, 0.012, 0.24, M.blued, 0, 0.12, -0.87, 12);
   vmCyl(g, 0.017, 0.03, M.blued, 0, 0.12, -0.8, 12);                     // gas block
   vmMuzzleBrake(g, M, -1.02, 0.019);
-  vmIronFront(g, M, -0.72, 0.17);
+  vmBox(g, 0.03, 0.014, 0.03, M.blued, 0, 0.177, -0.72);   // folded front sight (out of the red dot's view)
+  VM_SIGHT = 0.25;   // optic on a riser: the rail and handguard stay well under the dot
   vmRedDot(g, M, -0.13, 0.17, true);
   vmGrip(g, M); vmTrigger(g, M, 0.0);
   // curved magazine
@@ -197,8 +198,9 @@ function vmSmg(g, M) {
   for (let i = 0; i < 7; i++) { const r = new THREE.Mesh(new THREE.TorusGeometry(0.034, 0.003, 6, 20), M.blued); r.position.set(0, 0.11, -0.32 - i * 0.032); g.add(r); }
   vmCyl(g, 0.036, 0.02, M.blued, 0, 0.11, -0.55, 18);
   const vg = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.02, 0.13, 14), M.poly); vg.position.set(0, 0.02, -0.36); g.add(vg);   // vertical foregrip
+  VM_SIGHT = 0.245;
   vmRedDot(g, M, -0.1, 0.17, false);
-  vmIronFront(g, M, -0.27, 0.165);
+  vmBox(g, 0.026, 0.012, 0.024, M.blued, 0, 0.171, -0.27);   // folded front sight
   vmGrip(g, M); vmTrigger(g, M, 0.03);
   { const m0 = g.children.length;
   vmProfile(g, [[-0.15, 0.03], [-0.1, 0.03], [-0.095, -0.24], [-0.155, -0.24]], 0.04, M.poly);   // straight magazine
@@ -214,15 +216,16 @@ function vmLmg(g, M) {
   vmProfile(g, [[0.08, 0.17], [-0.36, 0.17], [-0.36, 0.06], [-0.1, 0.04], [-0.08, 0.02], [0.08, 0.02]], 0.085, M.anod);
   vmProfile(g, [[0.02, 0.2], [-0.3, 0.2], [-0.32, 0.17], [0.04, 0.17]], 0.08, M.anod);           // feed cover
   vmBox(g, 0.012, 0.012, 0.3, M.anod, 0.03, 0.2, -0.14);
-  // carry handle
-  vmBox(g, 0.02, 0.05, 0.02, M.anod, 0, 0.23, -0.3); vmBox(g, 0.02, 0.05, 0.02, M.anod, 0, 0.23, -0.46); vmBox(g, 0.024, 0.016, 0.2, M.poly, 0, 0.26, -0.38);
+  // optic on a riser over the feed cover: the sight line is higher, so the gun body stays below what you aim at
+  VM_SIGHT = 0.3;
+  vmBox(g, 0.05, 0.03, 0.14, M.anod, 0, 0.215, -0.1);
+  vmRedDot(g, M, -0.1, 0.23, true);
   // heavy barrel in a perforated heat shroud
   vmCyl(g, 0.045, 0.4, M.blued, 0, 0.11, -0.56, 16);
   for (let i = 0; i < 7; i++) for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + Math.PI / 4; vmBox(g, 0.012, 0.012, 0.025, M.dark, Math.cos(a) * 0.044, 0.11 + Math.sin(a) * 0.044, -0.4 - i * 0.05, 0, 0, a); }
   vmCyl(g, 0.02, 0.2, M.blued, 0, 0.11, -0.86, 14);
   vmMuzzleBrake(g, M, -0.99, 0.026);
-  vmIronFront(g, M, -0.82, 0.13);
-  vmIronRear(g, M, -0.02, 0.2);
+  vmBox(g, 0.03, 0.02, 0.018, M.blued, 0, 0.14, -0.82);   // low front sight base
   vmGrip(g, M); vmTrigger(g, M, 0.04);
   // ammo box and belt
   { const m0 = g.children.length;
@@ -317,6 +320,7 @@ function vmMagGroup(g, from) {
 
 function buildViewModel(clsKey) {
   vmInit();
+  VM_SIGHT = 0.207;
   if (R3.vm) { vmScene.remove(R3.vm); R3.vm.traverse(n => { if (n.geometry) n.geometry.dispose(); }); }
   const M = VMX.mats, g = new THREE.Group();
   const sleeveM = new THREE.MeshStandardMaterial({ color: new THREE.Color('#4a4f40').lerp(new THREE.Color(TEAMS[G.player.team].dark), 0.35), metalness: 0, roughness: 0.95, bumpMap: VMX.fabric, bumpScale: 0.004 });
@@ -337,6 +341,7 @@ function buildViewModel(clsKey) {
   const holder = new THREE.Group(); holder.add(g); g.scale.setScalar(0.3);
   if (spec.cup) g.position.z = -0.07;   // the pistol is held out at arm's length
   vmScene.add(holder);
+  spec.sight = VM_SIGHT; VM_SIGHT = 0.207;
   R3.vm = holder; R3.vmCls = clsKey; R3.vmTeam = G.player.team; R3.vmSpec = spec;
   R3.drawT = 0;   // weapon comes up from below (feel.js)
 }

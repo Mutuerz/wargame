@@ -157,8 +157,8 @@ function feelWeapon(P, dt, vm, base) {
   const fx = F.flinch.x * 0.004, seat = F.seat.x * 0.003;
   vm.position.set(
     lerp(0.12, 0, ad) + bx + F.sway.x.x + sp * 0.04 + fx + down * 0.05,
-    lerp(-0.11, -0.062, ad) + by + breathe + F.sway.y.x - sp * 0.03 - rl * 0.1 + F.land.x * 0.0012 + seat - down * 0.2 - th * 0.16,
-    lerp(-0.2, -0.17, ad) + F.kick.x * 0.004 + sp * 0.02 + down * 0.05);
+    lerp(-0.11, -(R3.vmSpec?.sight ?? 0.207) * 0.3, ad) + by + breathe + F.sway.y.x - sp * 0.03 - rl * 0.1 + F.land.x * 0.0012 + seat - down * 0.2 - th * 0.16,
+    lerp(-0.2, -0.15, ad) + F.kick.x * 0.004 + sp * 0.02 + down * 0.05);
   vm.rotation.set(
     F.kick.x * 0.02 * (1 - ad * 0.6) + rl * 0.5 - sp * 0.35 + F.sway.y.x * 1.5 - down * 0.9 - th * 0.7 + seat * 3,
     lerp(0.04, 0, ad) * (1 - sp) + sp * 0.55 + F.sway.x.x * 2 + down * 0.3,

@@ -232,7 +232,8 @@ const NET = {
       else if (os && os.cls && os.cls.key === 'smg') SFX.smg(x, y, owner === P.id);
       else SFX.shot(x, y, owner === P.id);
     } else if (k === 'hit') {
-      const [, tid, aid, x, y] = e;
+      const [, tid, aid, x, y, hx, hy, hz, hh] = e;
+      if (aid === P.id && hz !== undefined) pelletMark(hx, hy, hz, !!hh);
       if (Math.random() < 0.6) stampBlood(G.art, x + rand(-10, 10), y + rand(-10, 10), rand(3, 7));
       for (let i = 0; i < 4; i++) G.particles.push({ type: 'blood', x, y, vx: rand(-80, 80), vy: rand(-80, 80), life: 0.4, max: 0.4, size: rand(1.5, 3) });
       if (tid === P.id) { G.hurtT = 0.45; P.lastHitBy = G.soldiers.find(s => s.id === aid) || null; }
@@ -314,6 +315,7 @@ const NET = {
     G.feed = G.feed.filter(f => f.t > 0);
     if (G.msg) { G.msg.t -= dt; if (G.msg.t <= 0) G.msg = null; }
     G.hurtT = Math.max(0, G.hurtT - dt); G.hitT = Math.max(0, G.hitT - dt);
+  if (G.pelHits) { for (const h of G.pelHits) h.t -= dt; G.pelHits = G.pelHits.filter(h => h.t > 0); }
     G.cam.shake = Math.max(0, G.cam.shake - dt * 30);
     G.visT -= dt;
     if (G.visT <= 0) { G.visT = 0.15; computeVision(P.team); }
@@ -326,7 +328,7 @@ const NET = {
     P.aimX = ctl.aimX; P.aimY = ctl.aimY;
     const flags = (ctl.fire ? 1 : 0) | (ctl.sprint ? 2 : 0) | (ctl.interact ? 4 : 0) | (ctl.scope ? 8 : 0) | (ctl.crouch ? 16 : 0) | (ctl.jump ? 32 : 0);
     const inp = { seq: ++this.seq, mx: ctl.mx, my: ctl.my, fire: !!ctl.fire, sprint: !!ctl.sprint, ads: !!(ctl.scope && !P.cls.scopeRange), crouch: !!ctl.crouch, jump: !!ctl.jump, angle: P.angle };
-    if (ctl.fire && P.mag > 0 && !P.reloading) { P.steady = false; this.shotAt = performance.now(); }
+    if ((ctl.fire && P.mag > 0 && !P.reloading) || ctl.mx || ctl.my) { P.steady = false; this.shotAt = performance.now(); }   // moving loses it at once too
     this.send({ t: 'i', d: [0, inp.seq, ctl.mx, ctl.my, flags, Math.round(ctl.aimX), Math.round(ctl.aimY), Math.round(ctl.pitch * 1000)] });
     if (ctl.reload) this.act({ a: 'reload' });
     if (ctl.throwAt) this.act({ a: 'throw', x: Math.round(ctl.throwAt.x), y: Math.round(ctl.throwAt.y) });

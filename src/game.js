@@ -102,7 +102,7 @@ function spawnSoldier(s, choice) {
   s.x = p.x; s.y = p.y; s.z = 0; s.vx = s.vy = 0; s.pitch = 0;
   Perks.reapply(G, s);
   s.hp = maxHp(s); s.alive = true; s.shield = CFG.SPAWN_SHIELD;
-  refillAmmo(s); s.fireCD = 0; s.heat = 0; s.scoped = false; s.steady = true; s.steadyT = 0; s.crouch = false; s.para = 0; s.jz = 0; s.jv = 0; s.vault = null;
+  refillAmmo(s); s.fireCD = 0; s.heat = 0; s.scoped = false; s.steady = false; s.steadyT = 0; s.crouch = false; s.para = 0; s.jz = 0; s.jv = 0; s.vault = null;
   if (s.slot) s.cls = s.prim;   // always come back holding the main weapon
   if (s.nextCls) { s.cls = s.nextCls; s.nextCls = null; refillAmmo(s); }
   s.prim = s.cls; s.slot = 0; s.stash = {};
@@ -240,6 +240,7 @@ function slopeFactor(s) {
   return 1;
 }
 function currentSpread(s, moving) {
+  if (s.cls.hipSpread && !s.scoped) return s.cls.hipSpread * (moving ? 1.3 : 1) / (s.crouch ? CFG.CROUCH_ACC : 1);   // sniper from the hip
   if (s.steady) return 0;
   let sp = (moving ? s.cls.spreadMove : s.cls.spread) * s.mods.spread + s.heat;
   if (s.scoped) sp *= s.cls.scopeSpread;
@@ -248,6 +249,10 @@ function currentSpread(s, moving) {
   return sp * slopeFactor(s);
 }
 
+// where the bullet being resolved struck (the server sends it so pellet hit markers work online)
+let HITPT = null;
+// shotgun pellet hit markers: small marks at each point a pellet struck, drawn by the HUD for half a second
+function pelletMark(x, y, z, head) { if (G) { (G.pelHits || (G.pelHits = [])).push({ x, y, z, head, t: 0.5 }); if (G.pelHits.length > 40) G.pelHits.shift(); } }
 function damage(target, amount, attacker, head) {
   if (!target.alive || target.shield > 0) return;
   target.hp -= amount;
@@ -298,8 +303,10 @@ function updateSoldier(s, dt, ctl) {
   const moving = ml > 0.1;
   const fire = ctl.fire;
   const sprint = ctl.sprint && moving && !fire && !s.reloading && !(ctl.scope && !s.cls.scopeRange) && !(s.para > 0);
-  // hold still without shooting for STEADY_T seconds and the next shot is dead accurate again
-  if (moving || fire) s.steadyT = 0; else if ((s.steadyT += dt) >= CFG.STEADY_T) s.steady = true;
+  // stand still without shooting for STEADY_T seconds and the next shot is dead accurate; moving or jumping loses it
+  if (moving || (s.jz || 0) > 1 || s.para > 0) { s.steadyT = 0; s.steady = false; }
+  else if (fire) s.steadyT = 0;
+  else if ((s.steadyT += dt) >= CFG.STEADY_T) s.steady = true;
 
   if (ctl.aimX !== undefined) { s.aimX = ctl.aimX; s.aimY = ctl.aimY; }
   if (ctl.pitch !== undefined) s.pitch = clamp(ctl.pitch, -1.4, 1.4);
@@ -475,6 +482,7 @@ function update(dt) {
   G.feed = G.feed.filter(f => f.t > 0);
   if (G.msg) { G.msg.t -= dt; if (G.msg.t <= 0) G.msg = null; }
   G.hurtT = Math.max(0, G.hurtT - dt); G.hitT = Math.max(0, G.hitT - dt);
+  if (G.pelHits) { for (const h of G.pelHits) h.t -= dt; G.pelHits = G.pelHits.filter(h => h.t > 0); }
   G.cam.shake = Math.max(0, G.cam.shake - dt * 30);
 
   // victory
@@ -546,7 +554,10 @@ function updateBullets(dt) {
         const d = Math.hypot(b.x + (nx - b.x) * bestT - b.ox, b.y + (ny - b.y) * bestT - b.oy), [d0, d1, lo] = b.fo;
         dmg *= d <= d0 ? 1 : d >= d1 ? lo : 1 - (1 - lo) * (d - d0) / (d1 - d0);
       }
+      HITPT = { x: b.x + (nx - b.x) * bestT, y: b.y + (ny - b.y) * bestT, z: b.z + (nz - b.z) * bestT, pel: !!b.pel, head };
+      if (b.pel && b.owner && b.owner.isPlayer) pelletMark(HITPT.x, HITPT.y, HITPT.z, head);
       damage(bestS, dmg, b.owner, head);
+      HITPT = null;
       hit = true; b.x = b.x + (nx - b.x) * bestT; b.y = b.y + (ny - b.y) * bestT;
     }
     if (!hit) { b.x = nx; b.y = ny; b.z = nz; b.life -= dt; if (b.life > 0) out.push(b); }

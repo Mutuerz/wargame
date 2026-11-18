@@ -1031,7 +1031,7 @@ function render3d(dt) {
     R3.adsT = lerp(R3.adsT || 0, P.ads ? 1 : 0, 1 - Math.exp(-dt * 14));
     const ad = R3.adsT;
     if (!feelWeapon(P, dt, vm, { ads: ad, sprint, reload: rl })) {
-        vm.position.set(lerp(0.12 + bx + (sprint ? 0.03 : 0), 0, ad), lerp(-0.11 - by + (sprint ? -0.02 : 0), -0.062, ad) - rl * 0.1, lerp(-0.2, -0.17, ad) + R3.kick * 0.03 * (1 - ad * 0.5));
+        vm.position.set(lerp(0.12 + bx + (sprint ? 0.03 : 0), 0, ad), lerp(-0.11 - by + (sprint ? -0.02 : 0), -(R3.vmSpec?.sight ?? 0.207) * 0.3, ad) - rl * 0.1, lerp(-0.2, -0.17, ad) + R3.kick * 0.03 * (1 - ad * 0.5));
     vm.rotation.set(R3.kick * 0.08 * (1 - ad * 0.6) + rl * 0.5 + (sprint ? -0.35 : 0), (sprint ? 0.5 : 0.04) * (1 - ad), rl * 0.6);
     }
     const fl = vm.getObjectByName('flash');

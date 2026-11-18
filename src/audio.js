@@ -23,6 +23,7 @@ const SFX = {
       this.loadClip('snShot', 'sfx/sniper-shot.mp3');
       this.loadClip('hsClip', 'sfx/headshot.mp3');
       this.loadClip('smgClip', 'sfx/smg-shots.mp3');
+      this.loadClip('f30Clip', 'sfx/final30.mp3');
     } catch (e) { this.ctx = null; }
   },
   toggle() { this.on = !this.on; if (this.master) this.master.gain.value = this.on ? 0.45 : 0; return this.on; },
@@ -176,3 +177,21 @@ function announceVoice(n) {
   } catch (e) { }
 }
 if (window.speechSynthesis) speechSynthesis.onvoiceschanged = () => { VOICE.pick = null; };
+
+// Last 30 seconds of the match: the war-drums stinger plays once (sfx/final30.mp3), fading out if the match ends
+// sooner or you leave it. Called every frame by ui.js.
+function finalCountdown() {
+  const src = SFX.f30Src;
+  if (src && (!G || G.over || G !== src.g)) {
+    try { const now = SFX.ctx.currentTime; src.gain.gain.setTargetAtTime(0, now, 0.4); src.node.stop(now + 2); } catch (e) { }
+    SFX.f30Src = null;
+  }
+  if (!G || G.over || G.final30 || G.time < CFG.TIME_LIMIT - 30) return;
+  G.final30 = true;
+  if (typeof message === 'function') message('30 seconds left', '#e6ad45', 2.5);
+  if (!SFX.ok() || !SFX.f30Clip) return;
+  const c = SFX.ctx, node = c.createBufferSource(), gain = c.createGain();
+  node.buffer = SFX.f30Clip; gain.gain.value = 0.6;
+  node.connect(gain); gain.connect(SFX.master); node.start();
+  SFX.f30Src = { node, gain, g: G };
+}
