@@ -418,6 +418,7 @@ function onMatchEnd() {
   });
   $('overStats').innerHTML = tables.join('');
   show('over');
+  hlOnOver();   // replay the match's best multi-kill first (killcam.js), then this screen
 }
 $('rematch').onclick = () => { if (G && G.online) NET.backToLobby(); else beginMatch(); };
 $('toMenu').onclick = () => { if (G && G.online) { NET.leave(); return; } G = null; show('menu'); };
@@ -471,7 +472,7 @@ function frame(now) {
     if (P.alive && !G.wasAlive) { look.yaw = P.angle; look.pitch = 0; }
     G.wasAlive = P.alive;
   }
-  if (G && !G.paused) { recoilFrame(dt); kcRecord(dt); kcUpdate(dt); }
+  if (G && !G.paused) { recoilFrame(dt); kcRecord(dt); hlRecord(dt); kcUpdate(dt); }
   finalCountdown();
   try { render(dt); } catch (e) { console.error(e); }
   if (G) updateRespawnDock();

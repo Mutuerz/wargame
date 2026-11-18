@@ -25,6 +25,7 @@ const SFX = {
       this.loadClip('smgClip', 'sfx/smg-shots.mp3');
       this.loadClip('f30Clip', 'sfx/final30.mp3');
       this.loadClip('hurtClip', 'sfx/hurt.mp3');
+      this.loadClip('ammoClip', 'sfx/ammo-pickup.mp3');
     } catch (e) { this.ctx = null; }
   },
   toggle() { this.on = !this.on; if (this.master) this.master.gain.value = this.on ? 0.45 : 0; return this.on; },
@@ -69,7 +70,7 @@ const SFX = {
   click(v = 0.25) { if (this.ok()) this.tone(v, 1800, 900, 0.04, 'square'); },
   reload() { if (!this.ok()) return; this.tone(0.15, 600, 300, 0.06, 'square'); setTimeout(() => this.ok() && this.tone(0.18, 900, 500, 0.05, 'square'), 260); },
   beep(x, y) { if (this.ok()) this.tone(this.vol(x, y) * 0.4, 1760, 1760, 0.08, 'square'); },
-  pickup() { if (this.ok()) { this.tone(0.2, 520, 780, 0.12, 'triangle'); } },
+  pickup() { if (!this.ok()) return; if (this.ammoClip) this.clip(this.ammoClip, 0.8); else this.tone(0.2, 520, 780, 0.12, 'triangle'); },   // ammo from a body, crate, cart or drop
   capture(good) { if (this.ok()) { this.tone(0.25, good ? 440 : 330, good ? 880 : 165, 0.45, 'triangle'); } },
   // decoded once into a buffer so it plays instantly, as often as needed
   loadClip(key, url) {

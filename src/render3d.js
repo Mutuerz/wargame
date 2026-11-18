@@ -1167,7 +1167,7 @@ function render3d(dt) {
   if (typeof postRender !== 'function' || !postRender(dt)) gl3.render(scene3, cam3);
 
   // someone else's weapon: the kill cam or first-person spectating (a simple hip pose, kick and flash on their shots)
-  if (v.fp && v.who && v.who !== P && v.who.cls && !(v.who.scoped && R3.zoom > 1.5)) {
+  if (v.fp && v.who && (v.who !== P || KC.on) && v.who.cls && !(v.who.scoped && R3.zoom > 1.5)) {
     const w = v.who;
     R3.wAdsT = lerp(R3.wAdsT || 0, w.ads ? 1 : 0, 1 - Math.exp(-dt * 14)); const ad = R3.wAdsT;
     if (!R3.vm || R3.vmCls !== w.cls.key || R3.vmTeam !== w.team) buildViewModel(w.cls.key, w.team);
