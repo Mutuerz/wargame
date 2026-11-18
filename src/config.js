@@ -15,6 +15,11 @@ const CFG = {
   SPRINT: 150,
   HP: 100,
   VISION_NEAR: 90,            // always visible around each soldier (fog of war)
+  BOT_FOV: 1.15,              // bots notice enemies within this many radians either side of where they look (~130 deg total)
+  BOT_NOTICE_NEAR: 120,       // ...or anywhere this close (footsteps, a body brushing past)
+  BOT_HEAR_SHOT: 1100,        // bots turn toward enemy gunfire within this distance (they look; they still need to see you)
+  BOT_SURPRISE: [0.15, 0.35], // extra reaction time when an enemy appears away from where they were looking
+  BOT_LOST_RADIUS: 70,        // reaching the last-seen spot without seeing the enemy: give up the chase
   SPAWN_SHIELD: 1.5,
   REGEN_DELAY: 5,             // seconds without taking damage before self-heal starts
   REGEN_TIME: 5,              // seconds to heal from 1 HP to full

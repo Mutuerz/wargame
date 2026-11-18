@@ -79,7 +79,6 @@ function startMatch(m, art, counts, playerSpot, opts = {}) {
     }
   }
   G.player = G.soldiers[0];
-  for (let t = 0; t < 2; t++) { const c = G.soldiers.filter(x => x.team === t && x.bot && !x.isPlayer && x.cls === CLASSES.rifleman); if (c.length) pickRand(c).bot.guard = true; }
   if (G.auto) { G.player.bot = newBrain(); }
   G.player.c4 = 1;
   for (let i = 0; i < CFG.DROP_START; i++) spawnDrop(true);

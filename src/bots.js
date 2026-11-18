@@ -18,6 +18,13 @@ function resetBrain(s) {
   if (b.role === 'sapper' && s.c4 <= 0) b.role = null;
 }
 
+// Can bot s notice something at (x, y), distance-squared d2? Only inside its field of view, unless it is right
+// next to it. (Being shot at or hearing gunfire turns the bot toward the source; it still has to see you.)
+function inView(s, x, y, d2) {
+  if (d2 <= CFG.BOT_NOTICE_NEAR * CFG.BOT_NOTICE_NEAR) return true;
+  return Math.abs(angDiff(s.angle, Math.atan2(y - s.y, x - s.x))) <= CFG.BOT_FOV;
+}
+
 function scan(s) {
   const b = s.bot, sk = G.skill;
   const near = Math.min(sk.range, visionRange(s)), far = s.scoped ? s.cls.scopeRange : 0;
@@ -26,6 +33,7 @@ function scan(s) {
     if (!e.alive || e.team === s.team) continue;
     const d = dist2(s.x, s.y, e.x, e.y);
     if (d >= bd) continue;
+    if (!inView(s, e.x, e.y, d)) continue;
     if (d > near * near && Math.abs(angDiff(s.angle, Math.atan2(e.y - s.y, e.x - s.x))) > s.cls.scopeCone) continue;
     // aim at the chest, or at the head when only the head shows over cover
     const ez = eyeZ(s), cz = chestZ(e), hz = feetZ(e) + bodyH(e) - 5;
@@ -38,17 +46,33 @@ function scan(s) {
     for (const c of G.carts) {
       if (c.team === s.team) continue;
       const d = dist2(s.x, s.y, c.x, c.y);
-      if (d < near * near && los3(G.m, s.x, s.y, eyeZ(s), c.x, c.y, elevAt(G.m, c.x, c.y) + 24)) { best = c; b.aimZ = 24; break; }
+      if (d < near * near && inView(s, c.x, c.y, d) && los3(G.m, s.x, s.y, eyeZ(s), c.x, c.y, elevAt(G.m, c.x, c.y) + 24)) { best = c; b.aimZ = 24; break; }
     }
   }
   if (best) {
     best.spotted[s.team] = G.time;
-    if (b.enemy !== best) { b.react = rand(sk.react[0], sk.react[1]); b.aimErr = rand(sk.aimErr[0], sk.aimErr[1]); }
-    b.enemy = best; b.vis = true; b.seeT = 2.5;
+    if (b.enemy !== best) {
+      b.react = rand(sk.react[0], sk.react[1]); b.aimErr = rand(sk.aimErr[0], sk.aimErr[1]);
+      // caught off guard: the enemy was not where we were looking
+      if (Math.abs(angDiff(s.angle, Math.atan2(best.y - s.y, best.x - s.x))) > 0.5) b.react += rand(CFG.BOT_SURPRISE[0], CFG.BOT_SURPRISE[1]);
+    }
+    b.enemy = best; b.vis = true; b.seeT = 2.5; b.lastX = best.x; b.lastY = best.y;
   } else {
     b.vis = false;
     if (b.enemy && !b.enemy.alive) b.enemy = null;
   }
+}
+
+// A teammate standing in the line of fire, closer than the target: hold fire.
+function allyInLine(s, tx, ty, d) {
+  const ux = (tx - s.x) / d, uy = (ty - s.y) / d;
+  for (const a of G.soldiers) {
+    if (a === s || !a.alive || a.team !== s.team) continue;
+    const ax = a.x - s.x, ay = a.y - s.y, along = ax * ux + ay * uy;
+    if (along <= 0 || along >= d) continue;
+    if (Math.abs(ax * uy - ay * ux) < 24) return true;
+  }
+  return false;
 }
 
 function enemiesAt(p, team) { return team === 0 ? p.c1 : p.c0; }
@@ -58,12 +82,6 @@ function chooseObjective(s) {
   // 1. defuse C4 on our bridge
   const c4 = G.c4s.find(c => c.bridge === t);
   if (c4 && dist(s.x, s.y, c4.x, c4.y) < 1500) { b.obj = { type: 'defuse', x: c4.x, y: c4.y }; return; }
-  // 1b. bridge guard: one bot per team watches its own bridge
-  if (b.guard && !m.bridges[t].destroyed) {
-    const br = m.bridges[t], gx = br.cx + (t === 0 ? 260 : -260);
-    if (!b.obj || b.obj.type !== 'guard' || Math.random() < 0.3) { const f = randomFreeNear(m, gx, br.cy, 160); b.obj = { type: 'guard', x: f.x, y: f.y }; }
-    return;
-  }
   // 2. sapper run
   if (b.role === 'sapper') {
     const br = m.bridges[1 - t];
@@ -174,6 +192,14 @@ function followPath(s, tx, ty, dt, goalUp) {
   if (b.path && b.pi < b.path.length) {
     let wp = b.path[b.pi], d = dist(wp.x, wp.y, s.x, s.y);
     while (d < 24 && b.pi < b.path.length - 1) { b.pi++; wp = b.path[b.pi]; d = dist(wp.x, wp.y, s.x, s.y); }
+    // cut corners: head straight for a later waypoint when the way there is clear (no zig-zag along grid cells)
+    if ((b.smoothT = (b.smoothT || 0) - dt) <= 0 && b.pi < b.path.length - 1) {
+      b.smoothT = 0.25;
+      for (let k = Math.min(b.path.length - 1, b.pi + 4); k > b.pi; k--) {
+        const q = b.path[k];
+        if (dist(q.x, q.y, s.x, s.y) < 400 && walkLine(m, s.x, s.y, q.x, q.y)) { b.pi = k; wp = q; d = dist(wp.x, wp.y, s.x, s.y); break; }
+      }
+    }
     if (d < 1) return [0, 0];
     return [(wp.x - s.x) / d, (wp.y - s.y) / d];
   }
@@ -196,24 +222,40 @@ function botThink(s, dt) {
   b.objT -= dt;
   if (b.objT <= 0 || !b.obj) { chooseObjective(s); b.objT = 3 + Math.random() * 2.5; }
 
-  // react to being shot by someone we cannot see
-  if (!b.enemy && G.time - s.lastHitT < 1.2 && s.lastHitBy && s.lastHitBy.alive) {
+  // react to being shot by someone we cannot see: turn toward where it came from
+  if (!b.vis && G.time - s.lastHitT < 1.2 && s.lastHitBy && s.lastHitBy.alive && s.lastHitBy.team !== s.team) {
     b.lookA = Math.atan2(s.lastHitBy.y - s.y, s.lastHitBy.x - s.x); b.lookT = 1.5;
   }
+  // hear nearby enemy gunfire: look that way (they still have to see the shooter before engaging)
+  if (!b.vis && !(b.lookT > 0) && (b.hearT = (b.hearT || 0) - dt) <= 0) {
+    b.hearT = 0.3;
+    let hd = CFG.BOT_HEAR_SHOT ** 2, src = null;
+    for (const o of G.soldiers) {
+      if (!o.alive || o.team === s.team || G.time - (o.lastShotT ?? -99) > 0.4) continue;
+      const d2 = dist2(s.x, s.y, o.x, o.y);
+      if (d2 < hd) { hd = d2; src = o; }
+    }
+    if (src) { b.lookA = Math.atan2(src.y - s.y, src.x - s.x) + rand(-0.25, 0.25); b.lookT = 1.2; }
+  }
+
+  // lost sight and reached the spot where we last saw them: stop chasing
+  if (b.enemy && !b.vis && b.lastX !== undefined && dist(s.x, s.y, b.lastX, b.lastY) < CFG.BOT_LOST_RADIUS) { b.enemy = null; b.seeT = 0; }
 
   const e = b.enemy;
   let moveX = 0, moveY = 0;
   if (e) {
-    const dx = e.x - s.x, dy = e.y - s.y, d = Math.hypot(dx, dy) || 1;
+    // while we can see them we track where they are; out of sight we only know where they were
+    const ex = b.vis ? e.x : b.lastX, ey = b.vis ? e.y : b.lastY, evx = b.vis ? (e.vx || 0) : 0, evy = b.vis ? (e.vy || 0) : 0;
+    const dx = ex - s.x, dy = ey - s.y, d = Math.hypot(dx, dy) || 1;
     const lead = d / s.cls.bulletSpeed;
-    ctl.aimX = e.x; ctl.aimY = e.y;
-    const want = Math.atan2(e.y + e.vy * lead - s.y, e.x + e.vx * lead - s.x) + b.aimErr * Math.sin(G.time * 2.1 + s.id);
+    ctl.aimX = ex; ctl.aimY = ey;
+    const want = Math.atan2(ey + evy * lead - s.y, ex + evx * lead - s.x) + b.aimErr * Math.sin(G.time * 2.1 + s.id);
     s.angle = turnTo(s.angle, want, sk.turn * dt);
-    const tz = (e.isCart ? elevAt(m, e.x, e.y) : feetZ(e)) + (b.aimZ ?? 22);
+    const tz = (e.isCart || !b.vis ? elevAt(m, ex, ey) : feetZ(e)) + (b.aimZ ?? 22);
     ctl.pitch = Math.atan2(tz - (eyeZ(s) - 3), d) + b.aimErr * 0.25 * Math.sin(G.time * 1.7 + s.id * 3);
     b.aimErr = Math.max(sk.minErr, b.aimErr - dt * 0.16);
     b.react -= dt;
-    if (b.vis && b.react <= 0 && Math.abs(angDiff(s.angle, want)) < 0.1 && d < s.cls.range * 0.95 && s.mag > 0 && !s.reloading) {
+    if (b.vis && b.react <= 0 && Math.abs(angDiff(s.angle, want)) < 0.1 && d < s.cls.range * 0.95 && s.mag > 0 && !s.reloading && !allyInLine(s, ex, ey, d)) {
       if (sniper) ctl.fire = Math.abs(angDiff(s.angle, want)) < 0.04;
       else {
         b.burst -= dt;
@@ -223,7 +265,7 @@ function botThink(s, dt) {
     }
     // grenade: enemy in throwing range, especially when hiding behind cover
     if (s.nades > 0 && b.nadeCD <= 0 && d > 140 && d < CFG.GRENADE_RANGE && (!b.vis || Math.random() < 0.01)) {
-      ctl.throwAt = { x: e.x + e.vx * 1.5, y: e.y + e.vy * 1.5 }; b.nadeCD = 6;
+      ctl.throwAt = { x: ex + evx * 1.5, y: ey + evy * 1.5 }; b.nadeCD = 6;
     }
     if (s.mag === 0) ctl.reload = true;
     // strafe
@@ -233,7 +275,7 @@ function botThink(s, dt) {
     if (perched) { moveX = 0; moveY = 0; }
     else if (!b.vis || d > 650) {
       // close in (or chase to last seen position)
-      const [fx, fy] = followPath(s, e.x, e.y, dt);
+      const [fx, fy] = followPath(s, ex, ey, dt);
       moveX = moveX * 0.3 + fx; moveY = moveY * 0.3 + fy;
     } else if (d < 220) { moveX -= dx / d * 0.5; moveY -= dy / d * 0.5; }
     // snipers hold still and scope in at range

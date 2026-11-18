@@ -104,10 +104,9 @@ const SIM = {
   addHuman(team, name, cls) {
     const free = G.soldiers.filter(s => s.team === team && !s.human);
     if (!free.length) return -1;
-    // prefer an empty slot (keeps the bot count), then a soldier who is alive and not a bridge guard
-    free.sort((a, b) => ((b.off ? 1 : 0) - (a.off ? 1 : 0)) || (b.alive - a.alive) || ((a.bot && a.bot.guard ? 1 : 0) - (b.bot && b.bot.guard ? 1 : 0)) || a.idx - b.idx);
+    // prefer an empty slot (keeps the bot count), then a soldier who is alive
+    free.sort((a, b) => ((b.off ? 1 : 0) - (a.off ? 1 : 0)) || (b.alive - a.alive) || a.idx - b.idx);
     const s = free[0];
-    if (s.bot && s.bot.guard) { const o = G.soldiers.find(x => x.team === team && x.bot && !x.human && x !== s); if (o) o.bot.guard = true; }
     s.human = { queue: [], last: null, ack: 0, reload: false, throwAt: null };
     s.isPlayer = true; s.bot = null; s.name = name;
     if (s.off) { s.off = false; spawnSoldier(s, { type: 'base', idx: s.spot }); }
@@ -129,7 +128,7 @@ const SIM = {
     G.botLimit = n;
     for (let t = 0; t < 2; t++) {
       const bots = G.soldiers.filter(s => s.team === t && !s.human && !s.off);
-      bots.sort((a, b) => ((a.bot && a.bot.guard ? 0 : 1) - (b.bot && b.bot.guard ? 0 : 1)) || a.idx - b.idx);
+      bots.sort((a, b) => a.idx - b.idx);
       bots.slice(n).forEach(benchSoldier);
     }
   },
