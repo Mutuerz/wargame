@@ -418,6 +418,26 @@ function onMatchEnd() {
 $('rematch').onclick = () => { if (G && G.online) NET.backToLobby(); else beginMatch(); };
 $('toMenu').onclick = () => { if (G && G.online) { NET.leave(); return; } G = null; show('menu'); };
 
+// ---------- recoil: every shot pushes your aim up (and a little sideways); you pull it back down with the mouse.
+// After you stop firing the aim drifts back part of the way (CFG.RECOIL_BACK) on its own.
+const RC = { lastMag: -1, cls: null, rec: 0, lastT: 0 };
+function recoilFrame(dt) {
+  const P = G && G.player;
+  if (!P || !P.alive || G.auto) { RC.lastMag = -1; RC.rec = 0; return; }
+  const now = performance.now() / 1000;
+  if (RC.cls === P.cls && RC.lastMag >= 0 && P.mag < RC.lastMag && !P.reloading && P.cls.recoil) {
+    const [up, side, drift] = P.cls.recoil, k = (P.ads || P.scoped ? 0.75 : 1) * (P.crouch ? 0.8 : 1);
+    for (let i = 0; i < Math.min(3, RC.lastMag - P.mag); i++) {
+      const u = up * k * (0.85 + Math.random() * 0.3);
+      look.pitch = clamp(look.pitch + u, -1.45, 1.45);
+      look.yaw += ((Math.random() - 0.5) * 2 * side + drift) * k;
+      RC.rec += u * CFG.RECOIL_BACK; RC.lastT = now;
+    }
+  }
+  RC.cls = P.cls; RC.lastMag = P.mag;
+  if (RC.rec > 0 && now - RC.lastT > 0.12) { const d = RC.rec * (1 - Math.exp(-dt * 7)); look.pitch -= d; RC.rec -= d; if (RC.rec < 1e-4) RC.rec = 0; }
+}
+
 // ---------- loop
 let last = performance.now(), acc = 0;
 const STEP = 1 / 60;
@@ -440,6 +460,7 @@ function frame(now) {
     if (P.alive && !G.wasAlive) { look.yaw = P.angle; look.pitch = 0; }
     G.wasAlive = P.alive;
   }
+  if (G && !G.paused) recoilFrame(dt);
   try { render(dt); } catch (e) { console.error(e); }
   if (G) updateRespawnDock();
   requestAnimationFrame(frame);

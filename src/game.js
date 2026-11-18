@@ -151,7 +151,7 @@ function shoot(s, moving) {
     G.bullets.push({ x: mx, y: my, z: mz, px: mx, py: my, ox: mx, oy: my, vx: Math.cos(ba) * sp * cp, vy: Math.sin(ba) * sp * cp, vz: Math.sin(bp) * sp,
       life: s.cls.range / sp, team: s.team, owner: s, dmg: s.cls.dmg * s.mods.dmg, sniper: s.cls === CLASSES.sniper, fo: s.cls.falloff, pel: n > 1 });
   }
-  s.mag--; s.fireCD = 1 / s.cls.rate; s.heat = Math.min(0.05, s.heat + (s.cls.auto ? 0.008 : 0.03));
+  s.mag--; s.fireCD = 1 / s.cls.rate; s.heat = Math.min(0.025, s.heat + (s.cls.auto ? 0.004 : 0.015));
   const sn = s.cls === CLASSES.sniper;   // the sniper's muzzle flash is much brighter and easier to spot
   G.particles.push({ type: 'flash', x: mx, y: my, z: mz, a: s.angle, life: sn ? 0.14 : 0.05, max: sn ? 0.14 : 0.05, big: sn });
   if (Math.random() < 0.5) stampCasing(G.art, s.x + Math.cos(s.angle + 1.6) * 16, s.y + Math.sin(s.angle + 1.6) * 16);

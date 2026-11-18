@@ -69,6 +69,7 @@ const CFG = {
   FOV: 75,                    // camera field of view (degrees)
   SCOPE_ZOOM: 5,              // sniper scope magnification
   SENS: 0.0022,               // mouse look sensitivity (radians per pixel)
+  RECOIL_BACK: 0.55,          // share of the recoil climb the aim drifts back down after you stop firing
   V_SPREAD: 0.6,              // vertical spread relative to horizontal
   ADS_ACC: 1.5,               // aiming down the sights divides spread by this
   ADS_SPEED: 0.6,             // movement speed while aiming down the sights
@@ -104,25 +105,25 @@ function obstHeight(o) {
 const CLASSES = {
   rifleman: {
     name: 'Rifleman', mag: 25, mags: 2, rate: 10, reload: 2.2, reloadEmpty: 2.8, dmg: 15,
-    bulletSpeed: 1500, range: 1250, spread: 0.035, spreadMove: 0.07, speed: 1, vision: 1300, auto: true,
+    bulletSpeed: 1500, range: 1250, spread: 0.0175, spreadMove: 0.035, speed: 1, vision: 1300, auto: true, recoil: [0.011, 0.005, 0.0015],
   },
   sniper: {
     name: 'Sniper', mag: 5, mags: 3, rate: 0.9, reload: 3.0, reloadEmpty: 3.4, dmg: 75,
-    bulletSpeed: 2600, range: 2600, spread: 0.01, spreadMove: 0.1, speed: 0.95, vision: 1300, auto: false,
+    bulletSpeed: 2600, range: 2600, spread: 0.005, spreadMove: 0.05, speed: 0.95, vision: 1300, auto: false, recoil: [0.07, 0.012, 0],
     scopeRange: 2400, scopeCone: 0.32, scopeSpread: 0.35,
   },
   smg: {
     name: 'SMG', mag: 30, mags: 2, rate: 14, reload: 1.8, reloadEmpty: 2.2, dmg: 11,
-    bulletSpeed: 1400, range: 700, spread: 0.06, spreadMove: 0.08, speed: 1.1, vision: 1300, auto: true,
+    bulletSpeed: 1400, range: 700, spread: 0.03, spreadMove: 0.04, speed: 1.1, vision: 1300, auto: true, recoil: [0.008, 0.007, -0.001],
   },
   lmg: {
     name: 'Machine gun', mag: 60, mags: 1, rate: 9, reload: 4.5, reloadEmpty: 5, dmg: 16,
-    bulletSpeed: 1500, range: 1300, spread: 0.05, spreadMove: 0.11, speed: 0.85, vision: 1300, auto: true,
+    bulletSpeed: 1500, range: 1300, spread: 0.025, spreadMove: 0.055, speed: 0.85, vision: 1300, auto: true, recoil: [0.009, 0.006, 0.002],
   },
   // Pump shotgun: 9 pellets in a wide cone. Point blank one shot kills; damage fades past ~110 px and the pellets stop at 560.
   shotgun: {
     name: 'Shotgun', mag: 6, mags: 3, rate: 1.3, reload: 2.6, reloadEmpty: 3.0, dmg: 14,
-    bulletSpeed: 1300, range: 560, spread: 0.03, spreadMove: 0.06, speed: 1.05, vision: 1300, auto: false,
+    bulletSpeed: 1300, range: 560, spread: 0.015, spreadMove: 0.03, speed: 1.05, vision: 1300, auto: false, recoil: [0.06, 0.015, 0],
     pellets: 9, pelletSpread: 0.1, falloff: [110, 480, 0.2],
   },
 };
@@ -130,7 +131,7 @@ for (const k in CLASSES) CLASSES[k].key = k;
 // Sidearm everyone carries on key 2: a small automatic machine pistol with 8-round magazines.
 const SIDEARM = {
   key: 'pistol', name: 'Machine pistol', mag: 8, mags: 4, rate: 13, reload: 1.4, reloadEmpty: 1.7, dmg: 11,
-  bulletSpeed: 1300, range: 650, spread: 0.05, spreadMove: 0.07, speed: 1, vision: 1300, auto: true,
+  bulletSpeed: 1300, range: 650, spread: 0.025, spreadMove: 0.035, speed: 1, vision: 1300, auto: true, recoil: [0.014, 0.009, 0.0],
 };
 const weaponByKey = k => CLASSES[k] || (k === SIDEARM.key ? SIDEARM : null);
 const WEAPON_BLURB = {

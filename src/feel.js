@@ -98,7 +98,7 @@ function feelShot(P) {
   if (!FEEL.on) return;
   const k = P.cls.key, up = k === 'sniper' ? 0.6 : k === 'shotgun' ? 0.5 : k === 'lmg' ? 0.18 : k === 'pistol' ? 0.14 : 0.2;
   const ads = P.ads ? 0.6 : 1;
-  FEEL.recoilP.v += up * ads; FEEL.recoilY.v += (Math.random() - 0.5) * up * 0.5 * ads;
+  FEEL.recoilP.v += up * ads * 0.4;   // a small visual kick on top of the real aim recoil (ui.js) FEEL.recoilY.v += (Math.random() - 0.5) * up * 0.5 * ads;
   FEEL.kick.v += (k === 'sniper' || k === 'shotgun' ? 9 : 4) * (P.ads ? 0.6 : 1);
 }
 
