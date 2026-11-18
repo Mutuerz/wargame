@@ -158,6 +158,7 @@ function shoot(s, moving) {
   if (Math.random() < 0.5) stampCasing(G.art, s.x + Math.cos(s.angle + 1.6) * 16, s.y + Math.sin(s.angle + 1.6) * 16);
   if (s.cls.pellets) SFX.shotgun(s.x, s.y, s.isPlayer, () => s.alive && s.mag > 0 && s.cls.pellets);
   else if (s.cls === CLASSES.sniper && SFX.sniper) SFX.sniper(s.x, s.y, s.isPlayer);
+  else if (s.cls.key === 'smg' && SFX.smg) SFX.smg(s.x, s.y, s.isPlayer);
   else SFX.shot(s.x, s.y, s.isPlayer);
 }
 

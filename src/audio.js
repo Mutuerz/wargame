@@ -22,6 +22,7 @@ const SFX = {
       this.loadClip('sgPump', 'sfx/shotgun-pump.mp3');
       this.loadClip('snShot', 'sfx/sniper-shot.mp3');
       this.loadClip('hsClip', 'sfx/headshot.mp3');
+      this.loadClip('smgClip', 'sfx/smg-shots.mp3');
     } catch (e) { this.ctx = null; }
   },
   toggle() { this.on = !this.on; if (this.master) this.master.gain.value = this.on ? 0.45 : 0; return this.on; },
@@ -85,6 +86,22 @@ const SFX = {
     if (v < 0.02) return;
     this.clip(this.sgShot, v);
     if (this.sgPump) setTimeout(() => { if (this.ok() && (!pumpIf || pumpIf())) this.clip(this.sgPump, Math.min(1, v * 1.3)); }, 600);
+  },
+  // SMG: the uploaded burst was cut into 4 single shots (0.34 s slots, each with a short room tail). Each bullet plays
+  // one, never the same twice in a row, slightly varied in pitch and level, so the sound follows the real fire rate,
+  // stops the instant you let go, and works for every SMG you hear (yours louder, others by distance).
+  smg(x, y, mine) {
+    if (!this.ok()) return;
+    if (!this.smgClip) { this.shot(x, y, mine); return; }
+    const now = this.ctx.currentTime;
+    if (now - this.shotWin > 0.05) { this.shotWin = now; this.shotN = 0; }
+    if (++this.shotN > 6) return;
+    const v = this.vol(x, y) * (mine ? 0.5 : 0.42);
+    if (v < 0.02) return;
+    let i = Math.floor(Math.random() * 3); if (i >= (this.smgLast ?? -1)) i++; this.smgLast = i;
+    const c = this.ctx, src = c.createBufferSource(), g = c.createGain();
+    src.buffer = this.smgClip; src.playbackRate.value = 0.96 + Math.random() * 0.08; g.gain.value = v * (0.9 + Math.random() * 0.2);
+    src.connect(g); g.connect(this.master); src.start(0, i * 0.34, 0.33);
   },
   // sniper rifle: the heavy shot clip (synth shot until it has loaded), heard further away than other guns
   sniper(x, y, mine) {
