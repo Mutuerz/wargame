@@ -629,6 +629,44 @@ function animateSoldier(s, o, u, dt) {
   u.body.rotation.x = 0.06 * o.rT * side;
   u.arms.rotation.x = Math.sin(ph) * 0.05 * o.wT;
 }
+// Enemies glow slightly red for a few seconds after you hit them or they shoot at you (a bullet of theirs passes
+// within ~4.5 m of you, or hits you), so the one you are fighting stays easy to pick out from cover and foliage.
+const MARK_HOLD = 2.5, MARK_FADE = 1;
+function markThreats(P) {
+  if (!P || !P.alive) return;
+  for (const b of G.bullets) {
+    if (b.mk || b.team === P.team) continue;
+    const dx = b.x - P.x, dy = b.y - P.y;
+    if (dx * dx + dy * dy > 90 * 90) continue;
+    b.mk = 1;
+    const o = b.owner || (b.own !== undefined ? G.soldiers.find(q => q.id === b.own) : null);
+    if (o && o.team !== P.team) o.markT = G.time;
+  }
+}
+function markGlow(s, o, P) {
+  const age = G.time - (s.markT ?? -99);
+  const k = s.team === P.team || age < 0 ? 0 : age < MARK_HOLD ? 1 : Math.max(0, 1 - (age - MARK_HOLD) / MARK_FADE);
+  if (Math.abs(k - (o.mk || 0)) < 0.01) return;
+  o.mk = k;
+  if (!o.markU) {   // a red rim light on the soldier's own materials: strongest at the silhouette edges, faint inside
+    o.markU = { value: 0 };
+    const set = new Set();
+    o.g.traverse(n => { const m = n.material; if (n.isMesh && m && m.isMeshLambertMaterial) set.add(m); });
+    for (const m of set) {
+      m.onBeforeCompile = sh => {
+        sh.uniforms.markK = o.markU;
+        sh.fragmentShader = sh.fragmentShader
+          .replace('#include <common>', '#include <common>\nuniform float markK;')
+          .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+            if (markK > 0.0) { float rim = 1.0 - abs(dot(normalize(vViewPosition), normal));
+              totalEmissiveRadiance += vec3(1.0, 0.1, 0.06) * markK * (0.07 + 1.0 * rim * rim * rim); }`);
+      };
+      m.customProgramCacheKey = () => 'mark';
+      m.needsUpdate = true;
+    }
+  }
+  o.markU.value = k;
+}
 function soldierObj(s) {
   let o = R3.soldiers.get(s.id);
   const ck = s.cls.key;
@@ -1163,11 +1201,13 @@ function render3d(dt) {
 
   // soldiers
   const seenIds = new Set();
+  markThreats(P);
   for (const s of G.soldiers) {
     const show = soldierShown(s, P) && !(s === (v.who || P) && v.fp);
     if (!show) { const o = R3.soldiers.get(s.id); if (o) o.g.visible = false; continue; }
     const o = soldierObj(s), u = o.g.userData;
     o.g.visible = true; seenIds.add(s.id);
+    markGlow(s, o, P);
     if (FEEL.on) animateSoldier(s, o, u, dt);
     else {
     o.g.position.set(s.x, feetZ(s), s.y);

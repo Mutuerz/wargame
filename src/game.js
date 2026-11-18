@@ -261,6 +261,10 @@ function damage(target, amount, attacker, head) {
   if (!target.alive || target.shield > 0) return;
   target.hp -= amount;
   target.lastHitBy = attacker; target.lastHitT = G.time;
+  if (attacker && attacker.team !== target.team) {   // red glow on the enemy you hit, or who hit you (render3d markGlow)
+    if (attacker.isPlayer) target.markT = G.time;
+    if (target.isPlayer) attacker.markT = G.time;
+  }
   if (target.isPlayer) { G.hurtT = 0.45; if (attacker) G.hurtFrom = Math.atan2(attacker.y - target.y, attacker.x - target.x); }
   if (attacker && attacker.isPlayer) { G.hitT = 0.15; if (head) G.headT = 0.3; SFX.hit(); }
   else if (target.isPlayer && SFX.hurt) SFX.hurt();

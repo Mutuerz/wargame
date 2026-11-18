@@ -222,7 +222,7 @@ const NET = {
     const P = G.player, k = e[0];
     if (k === 'b') {
       const [, x, y, vx, vy, life, team, sniper, owner, z, vz] = e;
-      G.bullets.push({ x, y, z: z || 0, vx, vy, vz: vz || 0, life, team, sniper: sniper === 1, pel: sniper >= 2, mine: owner === P.id });
+      G.bullets.push({ x, y, z: z || 0, vx, vy, vz: vz || 0, life, team, sniper: sniper === 1, pel: sniper >= 2, mine: owner === P.id, own: owner });
       const os = sniper !== 3 ? G.soldiers.find(q => q.id === owner) : null; if (os) os.lastShotT = G.time;
       if (sniper === 3) return;   // extra shotgun pellets: one flash and one bang per shot
       G.particles.push({ type: 'flash', x, y, z: z || undefined, a: Math.atan2(vy, vx), life: sniper === 1 ? 0.14 : 0.05, max: sniper === 1 ? 0.14 : 0.05, big: sniper === 1 });
@@ -236,7 +236,8 @@ const NET = {
       if (aid === P.id && hz !== undefined) pelletMark(hx, hy, hz, !!hh);
       if (Math.random() < 0.6) stampBlood(G.art, x + rand(-10, 10), y + rand(-10, 10), rand(3, 7));
       for (let i = 0; i < 4; i++) G.particles.push({ type: 'blood', x, y, vx: rand(-80, 80), vy: rand(-80, 80), life: 0.4, max: 0.4, size: rand(1.5, 3) });
-      if (tid === P.id) { G.hurtT = 0.45; P.lastHitBy = G.soldiers.find(s => s.id === aid) || null; }
+      if (tid === P.id) { G.hurtT = 0.45; P.lastHitBy = G.soldiers.find(s => s.id === aid) || null; if (P.lastHitBy && P.lastHitBy.team !== P.team) P.lastHitBy.markT = G.time; }
+      if (aid === P.id) { const t = G.soldiers.find(s => s.id === tid); if (t && t.team !== P.team) t.markT = G.time; }
       if (aid === P.id && tid !== P.id) { G.hitT = 0.15; SFX.hit(); } else if (tid === P.id) SFX.hurt(); else SFX.hitNear(x, y);
     } else if (k === 'body') {
       stampBody(G.art, { x: e[1], y: e[2], angle: e[3], team: e[4], fallA: e[5], z: e[6] || 0, para: e[7] || 0, cls: weaponByKey(e[8]) || CLASSES.rifleman });
