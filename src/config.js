@@ -88,7 +88,7 @@ const CFG = {
   PARA_INTERVAL: 30,          // the only respawn: every 30 s up to PARA_N dead soldiers parachute over a held sector
   PARA_N: 5,
   JUMP_V: 198, GRAV: 680,     // Space: jump about 1.35 m, with a softer, floatier fall (0.56 s in the air)
-  SLIDE_BOOST: 1.5, SLIDE_DECAY: 2.6,   // C/Ctrl while sprinting: a slide at 1.5x your speed that dies off fast (about 0.8 s)
+  SLIDE_BOOST: 1.5, SLIDE_DECAY: 1.3,   // C/Ctrl while sprinting: a slide at 1.5x your speed that dies off (about 7.5 m, 1.5 s)
   VAULT_H: 44, VAULT_T: 48,   // Space next to cover at most this tall and this thick (px) vaults over it; windows too
   VAULT_TIME: 0.5,
   PARA_H: 400,                // drop height (20 m)

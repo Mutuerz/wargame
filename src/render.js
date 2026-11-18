@@ -50,7 +50,10 @@ function render(dt) {
   if (R3.vScoped && R3.zoom > 1.5) drawScope();   // yours, or the scope of whoever you are watching
   else ctx.drawImage(vignette, 0, 0, VW, VH);
   if (KC.on) { kcOverlay(); return; }
+  // low health: blood creeps in from the edges below 40 HP and fades as you heal
+  if (P.alive && P.hp < 40) drawLowHealth(1 - P.hp / 40);
   if (G.hurtT > 0) {
+    ctx.fillStyle = `rgba(200,10,0,${Math.min(0.22, G.hurtT * 0.5)})`; ctx.fillRect(0, 0, VW, VH);   // a red flash over everything
     ctx.globalAlpha = G.hurtT * 1.4;
     const g = ctx.createRadialGradient(VW / 2, VH / 2, Math.min(VW, VH) * 0.3, VW / 2, VH / 2, Math.max(VW, VH) * 0.7);
     g.addColorStop(0, 'rgba(160,0,0,0)'); g.addColorStop(1, 'rgba(160,0,0,0.6)');
@@ -443,4 +446,29 @@ function drawScores() {
       txt(String(s.points), cx + w / 2 - 44, yy, `500 13px ${M}`, '#e6ad45', 'right');
     });
   }
+}
+
+// Blood at the screen edges for low health: drawn once into a canvas (splats and drips around the border),
+// then shown with an opacity that follows how hurt you are, with a slow heartbeat pulse.
+let LOWHP = null;
+function drawLowHealth(k) {
+  if (!LOWHP || LOWHP.w !== VW || LOWHP.h !== VH) {
+    const c = makeCanvas(VW, VH), g = c.getContext('2d'), rnd = mulberry32(77);
+    const rg = g.createRadialGradient(VW / 2, VH / 2, Math.min(VW, VH) * 0.3, VW / 2, VH / 2, Math.max(VW, VH) * 0.72);
+    rg.addColorStop(0, 'rgba(90,0,0,0)'); rg.addColorStop(1, 'rgba(110,0,0,0.85)');
+    g.fillStyle = rg; g.fillRect(0, 0, VW, VH);
+    for (let i = 0; i < 70; i++) {   // splats hugging the edges
+      const side = Math.floor(rnd() * 4), t = rnd(), d = Math.pow(rnd(), 2) * Math.min(VW, VH) * 0.16;
+      const x = side === 0 ? t * VW : side === 1 ? VW - d : side === 2 ? t * VW : d, y = side === 0 ? d : side === 1 ? t * VH : side === 2 ? VH - d : t * VH;
+      const r = 8 + rnd() * 38 * (1 - d / (Math.min(VW, VH) * 0.16) * 0.6);
+      g.fillStyle = `rgba(${110 + rnd() * 50 | 0},0,0,${0.35 + rnd() * 0.45})`;
+      g.beginPath(); for (let a = 0; a < 12; a++) { const rr = r * (0.7 + rnd() * 0.5), an = a / 12 * TAU; g.lineTo(x + Math.cos(an) * rr, y + Math.sin(an) * rr); } g.fill();
+      if (side === 0 && rnd() < 0.5) { g.fillRect(x - 2, y, 3 + rnd() * 3, r * (1 + rnd() * 2.5)); }   // drips from the top
+    }
+    LOWHP = { c, w: VW, h: VH };
+  }
+  const pulse = 0.85 + 0.15 * Math.sin(performance.now() / 1000 * Math.PI * 2 * (1 + k * 0.6));
+  ctx.globalAlpha = clamp(0.25 + k * 0.75, 0, 1) * pulse;
+  ctx.drawImage(LOWHP.c, 0, 0, VW, VH);
+  ctx.globalAlpha = 1;
 }

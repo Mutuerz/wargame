@@ -24,6 +24,7 @@ const SFX = {
       this.loadClip('hsClip', 'sfx/headshot.mp3');
       this.loadClip('smgClip', 'sfx/smg-shots.mp3');
       this.loadClip('f30Clip', 'sfx/final30.mp3');
+      this.loadClip('hurtClip', 'sfx/hurt.mp3');
     } catch (e) { this.ctx = null; }
   },
   toggle() { this.on = !this.on; if (this.master) this.master.gain.value = this.on ? 0.45 : 0; return this.on; },
@@ -113,7 +114,13 @@ const SFX = {
   },
   // you hit someone: the bullet-impact clip at full volume (synth tick until it has loaded)
   hit() { if (!this.ok()) return; if (this.hitClip) this.clip(this.hitClip, 0.9); else this.tone(0.12, 2400, 1800, 0.03, 'square'); },
-  // anyone else hit (including you): the same clip, quieter with distance
+  // you got hit: the sharp impact clip (rate-limited so an SMG burst does not stack ten of them)
+  hurt() {
+    if (!this.ok()) return;
+    const now = this.ctx.currentTime; if (now - (this.hurtAt || 0) < 0.07) return; this.hurtAt = now;
+    if (this.hurtClip) this.clip(this.hurtClip, 0.8); else this.tone(0.2, 300, 120, 0.08, 'sawtooth');
+  },
+  // anyone else hit: the same clip, quieter with distance
   hitNear(x, y) { if (this.ok() && this.hitClip) { const v = this.vol(x, y) * 0.55; if (v > 0.03) this.clip(this.hitClip, v); } },
   startWind() {
     const c = this.ctx;
