@@ -88,7 +88,8 @@ const NET = {
         const sm = document.createElement('small'); sm.textContent = CLASSES[p.cls] ? CLASSES[p.cls].name : p.cls; li.appendChild(sm);
         ul.appendChild(li);
       }
-      const li = document.createElement('li'); li.className = 'bots'; li.textContent = `+ ${10 - list.length} bot${10 - list.length === 1 ? '' : 's'}`; ul.appendChild(li);
+      const nb = Math.max(0, Math.min(L.settings.bots ?? 10, 10 - list.length));
+      const li = document.createElement('li'); li.className = 'bots'; li.textContent = `+ ${nb} bot${nb === 1 ? '' : 's'}`; ul.appendChild(li);
     }
     const sel = $('netCls');
     if (!sel.childElementCount) for (const k in CLASSES) { const o = document.createElement('option'); o.value = k; o.textContent = `${CLASSES[k].name} · ${WEAPON_BLURB[k].split(' · ').slice(1).join(', ')}`; sel.appendChild(o); }
@@ -96,8 +97,11 @@ const NET = {
     const bs = $('netBiome');
     if (!bs.childElementCount) for (const k of BIOME_KEYS) { const o = document.createElement('option'); o.value = k; o.textContent = BIOMES[k].name; bs.appendChild(o); }
     bs.value = L.settings.biome; $('netSkill').value = String(L.settings.skill);
+    const bb = $('netBots');
+    if (!bb.childElementCount) for (let i = 0; i <= 10; i++) { const o = document.createElement('option'); o.value = String(i); o.textContent = i === 10 ? '10 (fill the team)' : String(i); bb.appendChild(o); }
+    bb.value = String(L.settings.bots ?? 10);
     if (document.activeElement !== $('netSeed')) $('netSeed').value = L.settings.seed;
-    for (const id of ['netBiome', 'netSeed', 'netSkill']) $(id).disabled = !L.host;
+    for (const id of ['netBiome', 'netSeed', 'netSkill', 'netBots']) $(id).disabled = !L.host;
     $('netStart').hidden = !L.host;
     const playing = L.state === 'play';
     $('netStart').textContent = 'Start match';
@@ -119,6 +123,7 @@ const NET = {
         break;
       }
       case 'start': this.startMatch(m); break;
+      case 'roster': if (G && G.online) this.applyRoster(m.roster); break;
       case 's': if (G && G.online) this.onSnapshot(m); break;
       case 'over': if (G && G.online) this.onOver(m); break;
       case 'error': this.showJoin(m.msg, true); break;
@@ -162,8 +167,9 @@ const NET = {
 
   applyRoster(r) {
     if (!r || !G) return;
-    for (const [id, name, cls, human, k, d, pts, alive] of r) {
+    for (const [id, name, cls, human, k, d, pts, alive, off] of r) {
       const s = G.soldiers.find(x => x.id === id); if (!s) continue;
+      s.off = !!off;
       s.name = name; s.cls = CLASSES[cls] || s.cls; s.human = !!human; s.kills = k; s.deaths = d; s.points = pts; s.rAlive = !!alive;
     }
   },
@@ -473,5 +479,6 @@ $('netCls').onchange = () => { NET.cls = $('netCls').value; NET.send({ t: 'cls',
 $('netBiome').onchange = () => NET.send({ t: 'settings', biome: $('netBiome').value });
 $('netSeed').onchange = () => NET.send({ t: 'settings', seed: Number($('netSeed').value) || 0 });
 $('netSkill').onchange = () => NET.send({ t: 'settings', skill: Number($('netSkill').value) });
+$('netBots').onchange = () => NET.send({ t: 'settings', bots: Number($('netBots').value) });
 $('netStart').onclick = () => { $('netStart').textContent = 'Starting…'; NET.send({ t: 'start' }); };
 for (const id of ['netName', 'netRoom', 'netServer']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') NET.connect(); });

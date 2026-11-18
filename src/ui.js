@@ -368,7 +368,7 @@ function onMatchEnd() {
   $('overTitle').style.color = w === -1 ? 'var(--fg)' : TEAMS[w].color;
   $('overText').textContent = (w === -1 ? '' : `${TEAMS[w].name} wins. `) + G.reason + '.';
   const tables = [0, 1].map(t => {
-    const rows = G.soldiers.filter(s => s.team === t).sort((a, b) => b.kills - a.kills)
+    const rows = G.soldiers.filter(s => s.team === t && !s.off).sort((a, b) => b.kills - a.kills)
       .map(s => `<tr><td>${s.isPlayer ? '<b>' + s.name + '</b>' : s.name}</td><td class="n">${s.kills}</td><td class="n">${s.deaths}</td><td class="n">${s.points}</td></tr>`).join('');
     return `<table><thead><tr><th style="color:${TEAMS[t].color}">${TEAMS[t].name} · ${G.teams[t].points} pts · ${G.stats.captures[t]} captures</th><th class="n">K</th><th class="n">D</th><th class="n">Pts</th></tr></thead><tbody>${rows}</tbody></table>`;
   });

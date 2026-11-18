@@ -389,7 +389,7 @@ function drawScores() {
     txt('K', cx + w / 2 - 130, y + 56, `500 11px ${M}`, '#8e9b92', 'right');
     txt('D', cx + w / 2 - 90, y + 56, `500 11px ${M}`, '#8e9b92', 'right');
     txt('PTS', cx + w / 2 - 44, y + 56, `500 11px ${M}`, '#8e9b92', 'right');
-    G.soldiers.filter(s => s.team === t).sort((a, b) => b.kills - a.kills).forEach((s, i) => {
+    G.soldiers.filter(s => s.team === t && !s.off).sort((a, b) => b.kills - a.kills).forEach((s, i) => {
       const yy = y + 80 + i * 24;
       txt(s.name + (s.alive ? '' : '  †'), cx, yy, `${s.isPlayer ? 700 : 400} 13px ${M}`, s.isPlayer ? '#fff' : '#cfd5cc');
       txt(String(s.kills), cx + w / 2 - 130, yy, `500 13px ${M}`, '#fff', 'right');

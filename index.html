@@ -93,7 +93,7 @@
         <h2 class="eyebrow">Online</h2>
         <h1 id="netTitle">Play with friends</h1>
       </div>
-      <p>Everyone who types the same room code plays in the same match. Bots fill every empty slot, so a match is always 10 against 10.</p>
+      <p>Everyone who types the same room code plays in the same match. The host sets how many bots join each team (up to 10 per side in total).</p>
     </header>
     <div id="netJoin" class="net-form">
       <label>Your name <input id="netName" maxlength="16" autocomplete="nickname"></label>
@@ -117,6 +117,7 @@
       <div id="netHostBox" class="net-controls">
         <label>Theatre <select id="netBiome"></select></label>
         <label>Map seed <input id="netSeed" type="number" min="0" max="99999999"></label>
+        <label>Bots per team <select id="netBots"></select></label>
         <label>Bot skill <select id="netSkill"><option value="0">Recruit</option><option value="1">Veteran</option><option value="2">Elite</option></select></label>
       </div>
       <p id="netRoomInfo" class="net-status" role="status"></p>

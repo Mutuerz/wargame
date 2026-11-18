@@ -73,6 +73,8 @@ function playerControl(s) {
   return ctl;
 }
 
+function benchSoldier(s) { s.off = true; s.alive = false; s.x = s.y = -9999; s.riding = null; if (s.bot) s.bot.role = null; }
+
 // ---------- API used by the room (server/room.js)
 const DEFAULT_NAMES = [['Scout', 'Hawk', 'Moss', 'Flint', 'Rook', 'Birch', 'Cobalt', 'Wren', 'Atlas', 'Ember'], CALLSIGNS[1]];
 
@@ -94,12 +96,13 @@ const SIM = {
   addHuman(team, name, cls) {
     const free = G.soldiers.filter(s => s.team === team && !s.human);
     if (!free.length) return -1;
-    // prefer a soldier who is alive and not a bridge guard
-    free.sort((a, b) => (b.alive - a.alive) || ((a.bot && a.bot.guard ? 1 : 0) - (b.bot && b.bot.guard ? 1 : 0)) || a.idx - b.idx);
+    // prefer an empty slot (keeps the bot count), then a soldier who is alive and not a bridge guard
+    free.sort((a, b) => ((b.off ? 1 : 0) - (a.off ? 1 : 0)) || (b.alive - a.alive) || ((a.bot && a.bot.guard ? 1 : 0) - (b.bot && b.bot.guard ? 1 : 0)) || a.idx - b.idx);
     const s = free[0];
     if (s.bot && s.bot.guard) { const o = G.soldiers.find(x => x.team === team && x.bot && !x.human && x !== s); if (o) o.bot.guard = true; }
     s.human = { queue: [], last: null, ack: 0, reload: false, throwAt: null };
     s.isPlayer = true; s.bot = null; s.name = name;
+    if (s.off) { s.off = false; spawnSoldier(s, { type: 'base', idx: s.spot }); }
     s.c4 = Math.max(s.c4, 1);
     this.setClass(s.id, cls);
     feed(`${name} joined ${TEAMS[team].name}`, TEAMS[team].color);
@@ -110,6 +113,17 @@ const SIM = {
     feed(`${s.name} left`, '#8e9b92');
     s.human = null; s.isPlayer = false; s.name = DEFAULT_NAMES[s.team][s.idx];
     s.bot = newBrain(); resetBrain(s);
+    // over the room's bot limit: the slot goes empty instead of becoming a bot
+    if (G.soldiers.filter(x => x.team === s.team && !x.human && !x.off).length > (G.botLimit ?? 10)) benchSoldier(s);
+  },
+  // Keeps at most n bots per team (humans always play). Extra soldiers sit out the whole match.
+  setBots(n) {
+    G.botLimit = n;
+    for (let t = 0; t < 2; t++) {
+      const bots = G.soldiers.filter(s => s.team === t && !s.human && !s.off);
+      bots.sort((a, b) => ((a.bot && a.bot.guard ? 0 : 1) - (b.bot && b.bot.guard ? 0 : 1)) || a.idx - b.idx);
+      bots.slice(n).forEach(benchSoldier);
+    }
   },
   setClass(id, cls) {
     const s = this.get(id); if (!s || !CLASSES[cls] || s.cls === CLASSES[cls]) return;
@@ -143,7 +157,7 @@ const SIM = {
   // Map changes a late joiner must apply to its freshly generated copy of the map.
   mapState() { return { gone: NET.gone.slice(), bridges: G.m.bridges.map(b => b.destroyed) }; },
   roster() {
-    return G.soldiers.map(s => [s.id, s.name, s.cls.key, s.human ? 1 : 0, s.kills, s.deaths, s.points, s.alive ? 1 : 0]);
+    return G.soldiers.map(s => [s.id, s.name, s.cls.key, s.human ? 1 : 0, s.kills, s.deaths, s.points, s.alive ? 1 : 0, s.off ? 1 : 0]);
   },
   teamView(T) {
     const sol = [];

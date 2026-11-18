@@ -607,7 +607,7 @@ function updateParachutes(t, dt) {
   tm.paraT -= dt;
   if (tm.paraT > 0) return;
   tm.paraT = CFG.PARA_INTERVAL;
-  const dead = G.soldiers.filter(s => s.team === t && !s.alive && !s.riding).sort((a, b) => (a.diedAt || 0) - (b.diedAt || 0)).slice(0, CFG.PARA_N);
+  const dead = G.soldiers.filter(s => s.team === t && !s.alive && !s.riding && !s.off).sort((a, b) => (a.diedAt || 0) - (b.diedAt || 0)).slice(0, CFG.PARA_N);
   if (!dead.length) return;
   const held = m.points.filter(p => fullyHeld(p, t));
   const zones = held.length ? held : m.spawns[t].map(sp => ({ x: sp.x, y: sp.y, name: 'base' }));

@@ -13,7 +13,7 @@ A keyboard and mouse are required, and a browser with WebGL. Click the game once
 
 ## Play online
 
-Bridgehead also has an online mode for up to 20 people (bots fill the empty slots). Click **Play online with friends**
+Bridgehead also has an online mode for up to 20 people (the host picks 0 to 10 bots per team in the lobby; people always get a slot, up to 10 per side). Click **Play online with friends**
 on the main menu, pick a name and a room code, and share the code. The server lives in `server/`; how to run it on a
 free Oracle Cloud VM (setup script included) is in [deploy/README.md](deploy/README.md).
 
