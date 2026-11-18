@@ -50,7 +50,8 @@ function tryGenerate(bk, seed, density) {
     if (Math.abs(y - by) < 180) x = 270;
     return { x, y, name: SPOT_NAMES[i], idx: i };
   });
-  const p0 = { x: Math.round(rnd(0.27, 0.35) * W), y: Math.round(rnd(0.2, 0.3) * H) };
+  // A (and its mirror E) sits close to each base
+  const p0 = { x: Math.round(rnd(0.17, 0.2) * W), y: Math.round(rnd(0.2, 0.3) * H) };
   if (R() < 0.5) p0.y = H - p0.y;
   const p1 = { x: Math.round(rnd(0.4, 0.44) * W), y: Math.round((p0.y < H / 2 ? rnd(0.64, 0.78) : rnd(0.22, 0.36)) * H) };
   const points = [
@@ -158,16 +159,14 @@ function tryGenerate(bk, seed, density) {
     ring(p.x, p.y, 118, [[s0, 1.1], [s0 + 2.1, 1.1], [s0 + 4.2, 1.1]]);
     add(rect(p.x - 17 + Math.cos(s0 + 1.6) * 50, p.y - 17 + Math.sin(s0 + 1.6) * 50, 34, 34, 'crate'));
   }
-  const s1 = rnd(0, 0.6);
-  ring(W / 2, H / 2, 125, [[s1, 0.9], [s1 + 1.55, 0.9]]);
-  add(rect(W / 2 - 75, H / 2 - 17 - 40, 34, 34, 'crate'));
+  // the center point C is a two-storey house (added after the mirror step, since it sits on the center)
 
   // --- Houses: stone walls with windows you can shoot through; grenades and C4 break them.
   // Up to two storeys: two-storey houses get a staircase along one inside wall and windows all round upstairs.
-  function house(x, y, w, h) {
+  function house(x, y, w, h, opts = {}) {
     const parts = [], th = 14, seg = 40, door = 66, FH = CFG.FLOOR_H;
-    const doors = new Set([ri(0, 3)]); if (R() < 0.6) doors.add(ri(0, 3));
-    const stories = R() < CFG.TWO_STOREY ? 2 : 1;
+    const doors = opts.doors ? new Set(opts.doors) : new Set([ri(0, 3)]); if (!opts.doors && R() < 0.6) doors.add(ri(0, 3));
+    const stories = opts.stories || (R() < CFG.TWO_STOREY ? 2 : 1);
     function walls(storey) {
       for (const sd of [0, 1, 2, 3]) {
         const horiz = sd === 0 || sd === 2, len = horiz ? w : h;
@@ -274,6 +273,9 @@ function tryGenerate(bk, seed, density) {
 
   // --- Mirror (180-degree rotation)
   const solids = S.concat(S.map(rotShape));
+  // center house over point C: doors facing both bases (west and east), stairs inside
+  const ch = house(W / 2 - 160, H / 2 - 120, 320, 240, { doors: [1, 3], stories: 2 });
+  for (const o of ch) { o.bb = shapeBB(o); o.seed = R(); solids.push(o); }
   solids.forEach((o, i) => { o.id = i; });
   const b1 = rotShape(bridge); b1.cx = W - bridge.cx; b1.cy = H - bridge.cy; b1.gap = rotShape(bridge.gap);
   return {
@@ -281,7 +283,7 @@ function tryGenerate(bk, seed, density) {
     solids,
     rivers: rivers.concat(rivers.map(rotShape)),
     pools: pools.concat(pools.map(rotShape)),
-    floors: floors.concat(floors.map(rotFloor)),
+    floors: floors.concat(floors.map(rotFloor), [ch.floor]),
     bridges: [Object.assign({}, bridge, { team: 0, destroyed: false }), Object.assign(b1, { team: 1, destroyed: false })],
     depots: [depot, rotPt(depot)],
     spawns: [spawns, spawns.map(rotPt)],
@@ -310,6 +312,16 @@ function finishMap(m) {
     }
   }
   m.houses = m.floors.filter(f => f.kind === 'house');
+  // sectors: the neutral zone is split between the five points (each cell belongs to its nearest point);
+  // whoever holds a point controls its whole sector
+  m.sector = new Uint8Array(NW * NH).fill(255);
+  for (let j = 0; j < NH; j++) for (let i = 0; i < NW; i++) {
+    const x = i * NC + NC / 2, y = j * NC + NC / 2;
+    if (x < CFG.BASE_W || x > W - CFG.BASE_W) continue;
+    let best = 0, bd = Infinity;
+    m.points.forEach((p, k) => { const d = dist2(x, y, p.x, p.y); if (d < bd) { bd = d; best = k; } });
+    m.sector[j * NW + i] = best;
+  }
   m.solids.forEach((o, i) => {
     o.sid = i;
     if (o.z0 === undefined) o.z0 = 0;
@@ -319,6 +331,12 @@ function finishMap(m) {
   });
   buildGrids(m);
 }
+// Index of the sector (point) at (x, y), or -1 inside the bases.
+function sectorAt(m, x, y) {
+  const i = clamp((x / NC) | 0, 0, NW - 1), j = clamp((y / NC) | 0, 0, NH - 1), v = m.sector[j * NW + i];
+  return v === 255 ? -1 : v;
+}
+function sectorOwner(m, x, y) { const k = sectorAt(m, x, y); return k < 0 ? (x < W / 2 ? 0 : 1) : m.points[k].owner; }
 function elevAt(m, x, y) { return heightAt(m, x, y) * CFG.LEVEL_H; }
 // The house whose footprint contains (x, y), if any.
 function houseAt(m, x, y) {

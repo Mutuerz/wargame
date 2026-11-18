@@ -123,14 +123,20 @@ function drawHUD() {
   }
   // top-left info
   if (!small) {
-    panel(12, 12, 230, 92);
+    panel(12, 12, 230, 112);
     txt(fmtTime(G.time), 24, 40, `700 22px ${D}`, '#fff');
     txt(`limit ${fmtTime(CFG.TIME_LIMIT)}`, 230, 40, `400 11px ${M}`, '#8e9b92', 'right');
     const myBridge = m.bridges[P.team];
-    const sup = myBridge.destroyed ? 'Supply line cut' : `Supply truck in ${fmtTime(G.teams[P.team].supplyT)}`;
+    const sup = myBridge.destroyed ? `Bridge down · parachutes in ${Math.ceil(G.teams[P.team].paraT || 0)} s` : `Supply truck in ${fmtTime(G.teams[P.team].supplyT)}`;
     txt(sup, 24, 64, `500 13px ${M}`, myBridge.destroyed ? '#ff5a4e' : '#e3e7df');
     const eb = m.bridges[1 - P.team];
     txt(eb.destroyed ? 'Enemy bridge: destroyed' : 'Enemy bridge: standing', 24, 86, `400 12px ${M}`, eb.destroyed ? '#7fd18b' : '#8e9b92');
+    // the sector you are standing in and who controls it
+    const sx = P.alive ? P.x : G.cam.x, sy = P.alive ? P.y : G.cam.y, sk = sectorAt(m, sx, sy);
+    if (sk >= 0) {
+      const o = m.points[sk].owner, oc = o >= 0 ? TEAMS[o].color : '#a8b0aa';
+      txt(`Sector ${m.points[sk].name} · ${o < 0 ? 'neutral' : o === P.team ? 'ours' : 'enemy'}`, 24, 110, `600 13px ${D}`, oc);
+    } else txt(sx < W / 2 ? 'Blue base' : 'Red base', 24, 110, `600 13px ${D}`, sx < W / 2 ? TEAMS[0].color : TEAMS[1].color);
   }
 
   // kill feed
@@ -166,7 +172,7 @@ function drawHUD() {
   else if (P.mag < 8 && P.mags.length) txt('R  RELOAD', 196, by + 70, `600 11px ${D}`, '#e6ad45');
   txt(`C4 ×${P.c4}`, 196, by + 90, `600 12px ${M}`, P.c4 ? '#e6ad45' : '#5d665f');
   txt(`G ×${P.nades}`, 250, by + 90, `600 12px ${M}`, P.nades ? '#e6ad45' : '#5d665f');
-  txt(P.cls.name.toUpperCase() + (P.scoped ? '  · SCOPED' : P.ads ? '  · AIMING' : ''), 24, by - 8, `700 12px ${D}`, P.scoped ? '#e6ad45' : '#cfd5cc');
+  txt(P.cls.name.toUpperCase() + (P.scoped ? '  · SCOPED' : P.ads ? '  · AIMING' : '') + (P.crouch ? '  · CROUCHED' : '') + (P.para > 0 ? `  · PARACHUTE ${Math.ceil(P.para / 20)} m` : ''), 24, by - 8, `700 12px ${D}`, P.scoped ? '#e6ad45' : '#cfd5cc');
   if (P.alive) {
     const sf = slopeFactor(P);
     if (sf < 1) txt('▼ DOWNHILL  aim +10%', 312, by - 8, `600 12px ${D}`, '#7fd18b', 'right');
@@ -190,10 +196,12 @@ function drawHUD() {
       if (P.act) { ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(VW / 2 - 100, VH - 140, 200, 8); ctx.fillStyle = '#e6ad45'; ctx.fillRect(VW / 2 - 100, VH - 140, 200 * P.actT / CFG.C4_PLANT, 8); }
     }
   }
+  drawCaptureProgress(D, M);
+  drawKillFx(D);
   // message
   if (G.msg) {
     ctx.globalAlpha = Math.min(1, G.msg.t * 1.5);
-    txt(G.msg.text, VW / 2, VH * 0.24, `700 ${small ? 18 : 26}px ${D}`, G.msg.color, 'center');
+    txt(G.msg.text, VW / 2, G.capPanel ? Math.max(VH * 0.24, 196) : VH * 0.24, `700 ${small ? 18 : 26}px ${D}`, G.msg.color, 'center');
     ctx.globalAlpha = 1;
   }
   // crosshair
@@ -210,6 +218,9 @@ function drawHUD() {
     ctx.moveTo(mx, my + gapPx); ctx.lineTo(mx, my + gapPx + 8);
     ctx.stroke(); ctx.globalAlpha = 1;
     ctx.fillStyle = P.ads ? '#ff5a4e' : 'rgba(255,255,255,0.9)'; ctx.fillRect(mx - 1, my - 1, 2, 2);
+    if (P.steady) {   // the next shot goes exactly where the dot is
+      ctx.strokeStyle = 'rgba(127,209,139,0.95)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(mx, my, 3.5, 0, TAU); ctx.stroke();
+    }
     if (G.hitT > 0) {   // hit marker (bigger for headshots)
       const k = (G.headT || 0) > 0 ? 13 : 9;
       ctx.strokeStyle = (G.headT || 0) > 0 ? '#ffd27a' : '#ffffff'; ctx.lineWidth = 2; ctx.beginPath();
@@ -239,6 +250,77 @@ function drawHUD() {
   if (G.showScores) drawScores();
 }
 
+// Fixed panel while you stand on a capture point: who is there and how far the capture has gone.
+function drawCaptureProgress(D, M) {
+  const P = G.player, m = G.m;
+  G.capPanel = false;
+  if (!P.alive) return;
+  const p = m.points.find(q => dist2(q.x, q.y, P.x, P.y) < CFG.CAP_R * CFG.CAP_R);
+  if (!p) return;
+  G.capPanel = true;
+  const mine = P.team, us = mine === 0 ? p.c0 : p.c1, them = mine === 0 ? p.c1 : p.c0;
+  const prog = mine === 0 ? p.prog : -p.prog;      // +100 = ours, -100 = theirs
+  let label, col;
+  if (us && them) { label = `CONTESTED · ${p.name}`; col = '#e6ad45'; }
+  else if (p.owner === mine && prog >= 99.9) { label = `HOLDING ${p.name}`; col = TEAMS[mine].color; }
+  else if (p.owner === 1 - mine) { label = `NEUTRALIZING ${p.name}`; col = '#e3e7df'; }
+  else { label = `CAPTURING ${p.name}`; col = TEAMS[mine].color; }
+  const w = Math.min(380, VW - 40), h = 62, x = VW / 2 - w / 2, y = 96;
+  panel(x, y, w, h);
+  txt(label, x + 14, y + 22, `700 15px ${D}`, col);
+  txt(`${us} ours · ${them} enemy`, x + w - 14, y + 22, `500 12px ${M}`, '#cfd5cc', 'right');
+  // bar: left half fills toward the enemy, right half toward us, from the neutral middle
+  const bx = x + 14, bw = w - 28, by2 = y + 34, bh = 14, mid = bx + bw / 2;
+  ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(bx, by2, bw, bh);
+  const f = clamp(prog / 100, -1, 1);
+  ctx.fillStyle = f >= 0 ? TEAMS[mine].color : TEAMS[1 - mine].color;
+  if (f >= 0) ctx.fillRect(mid, by2, bw / 2 * f, bh); else ctx.fillRect(mid + bw / 2 * f, by2, -bw / 2 * f, bh);
+  ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillRect(mid - 1, by2 - 3, 2, bh + 6);
+  txt(`${Math.round(Math.abs(prog))}%`, mid, by2 + bh + 12, `600 11px ${M}`, '#fff', 'center');
+}
+// Big kill callout in the middle of the screen.
+function drawKillFx(D) {
+  const k = G.killFx;
+  if (!k) return;
+  const now = performance.now() / 1000;
+  if (k.at === undefined) k.at = now;
+  k.t = k.max - (now - k.at);
+  if (k.t <= 0) { G.killFx = null; return; }
+  const age = k.max - k.t, pop = 1 + Math.max(0, 0.35 - age) * 1.6, a = Math.min(1, k.t * 2.5);
+  const big = k.n > 1, size = (big ? 34 + k.n * 4 : 22) * pop;
+  const cols = ['#ffffff', '#ffffff', '#ffd27a', '#ffad45', '#ff7a45', '#ff3b2f'];
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.shadowColor = 'rgba(0,0,0,0.85)'; ctx.shadowBlur = 10;
+  txt(k.text, VW / 2, VH * 0.36, `800 ${Math.round(size)}px ${D}`, cols[k.n], 'center', 'middle');
+  if (big) {
+    ctx.shadowBlur = 0;
+    for (let i = 0; i < k.n; i++) {   // one skull pip per kill in the chain
+      const px = VW / 2 + (i - (k.n - 1) / 2) * 22, py = VH * 0.36 + size * 0.7;
+      ctx.fillStyle = cols[k.n]; ctx.beginPath(); ctx.arc(px, py, 6, 0, TAU); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+// Sector ownership overlay (cached until an owner changes).
+function sectorLayer() {
+  const m = G.m, key = m.points.map(p => p.owner).join(',');
+  if (G.secKey === key && G.secCv) return G.secCv;
+  const c = G.secCv || (G.secCv = makeCanvas(NW, NH)), g = c.getContext('2d'), img = g.createImageData(NW, NH);
+  const rgb = TEAMS.map(t => [parseInt(t.color.slice(1, 3), 16), parseInt(t.color.slice(3, 5), 16), parseInt(t.color.slice(5, 7), 16)]);
+  for (let j = 0; j < NH; j++) for (let i = 0; i < NW; i++) {
+    const v = m.sector[j * NW + i], o = v === 255 ? -1 : m.points[v].owner, q = (j * NW + i) * 4;
+    // borders between sectors are drawn as thin light lines
+    const edge = v !== 255 && ((i + 1 < NW && m.sector[j * NW + i + 1] !== v) || (j + 1 < NH && m.sector[(j + 1) * NW + i] !== v));
+    if (edge) { img.data[q] = img.data[q + 1] = img.data[q + 2] = 235; img.data[q + 3] = 110; continue; }
+    if (o < 0) continue;
+    img.data[q] = rgb[o][0]; img.data[q + 1] = rgb[o][1]; img.data[q + 2] = rgb[o][2]; img.data[q + 3] = 60;
+  }
+  g.putImageData(img, 0, 0);
+  G.secKey = key;
+  return c;
+}
+
 // Map view used by minimap and the M overlay
 function drawMap(c, x, y, w, h, big) {
   const m = G.m, s = w / W, P = G.player;
@@ -246,6 +328,7 @@ function drawMap(c, x, y, w, h, big) {
   c.fillStyle = '#000'; c.fillRect(x - 2, y - 2, w + 4, h + 4);
   c.drawImage(G.art.thumb, x, y, w, h);
   c.beginPath(); c.rect(x, y, w, h); c.clip();
+  if (m.sector) { c.imageSmoothingEnabled = false; c.drawImage(sectorLayer(), x, y, w, h); c.imageSmoothingEnabled = true; }
   // bridges / depots
   for (const b of m.bridges) {
     c.fillStyle = b.destroyed ? '#ff5a4e' : '#c9a36b';

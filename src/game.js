@@ -10,7 +10,7 @@ function makeSoldier(team, idx, isPlayer) {
     hp: CFG.HP, alive: false, respawnT: 0, shield: 0,
     cls: CLASSES.rifleman, nades: 0, scoped: false, ads: false, aimX: 0, aimY: 0,
     mag: 25, mags: [], reloading: false, reloadT: 0, reloadMax: 1, fireCD: 0, heat: 0,
-    c4: 0, act: null, actT: 0, cacheCD: 0,
+    c4: 0, act: null, actT: 0, cacheCD: 0, steady: true, steadyT: 0, crouch: false, para: 0, streak: 0, lastKillT: -99,
     spot: 0, kills: 0, deaths: 0, points: 0, perks: [], mods: { speed: 1, reload: 1, dmg: 1, maxHp: 1, spread: 1 },
     spotted: [0, 0], lastHitBy: null, lastHitT: -99, walkPhase: 0,
     bot: isPlayer ? null : newBrain(),
@@ -42,8 +42,8 @@ function startMatch(m, art, counts, playerSpot, opts = {}) {
     skill: SKILLS[opts.skill ?? 1], auto: !!opts.auto,
     soldiers: [], bullets: [], particles: [], drops: [], caches: [], c4s: [], trucks: [], feed: [], msg: null,
     teams: [
-      { points: 0, supplyT: CFG.SUPPLY_INTERVAL, sapperT: 100 + Math.random() * 40, counts: counts.slice(), vis: new Uint8Array(GW * GH) },
-      { points: 0, supplyT: CFG.SUPPLY_INTERVAL, sapperT: 100 + Math.random() * 40, counts: botCommanderCounts(), vis: new Uint8Array(GW * GH) },
+      { points: 0, supplyT: CFG.SUPPLY_INTERVAL, paraT: CFG.PARA_INTERVAL, sapperT: 100 + Math.random() * 40, counts: counts.slice(), vis: new Uint8Array(GW * GH) },
+      { points: 0, supplyT: CFG.SUPPLY_INTERVAL, paraT: CFG.PARA_INTERVAL, sapperT: 100 + Math.random() * 40, counts: botCommanderCounts(), vis: new Uint8Array(GW * GH) },
     ],
     lock: { team: -1, t: 0 }, holdT: 0, dropT: CFG.DROP_INTERVAL, pathBudget: 0, cam: { x: 0, y: 0, shake: 0 }, hurtT: 0, hitT: 0,
     grenades: [], carts: [], strikes: [], targeting: false, specIdx: 0, visT: 0, smokers: [],
@@ -90,13 +90,15 @@ function spawnSoldier(s, choice) {
   s.x = p.x; s.y = p.y; s.z = 0; s.vx = s.vy = 0; s.pitch = 0;
   Perks.reapply(G, s);
   s.hp = maxHp(s); s.alive = true; s.shield = CFG.SPAWN_SHIELD;
-  refillAmmo(s); s.fireCD = 0; s.heat = 0; s.scoped = false;
+  refillAmmo(s); s.fireCD = 0; s.heat = 0; s.scoped = false; s.steady = true; s.steadyT = 0; s.crouch = false; s.para = 0;
   s.nades = Math.random() < CFG.GRENADE_CHANCE ? 1 : 0;
   s.act = null; s.actT = 0;
   s.angle = s.team === 0 ? 0 : Math.PI;
   if (s.bot) resetBrain(s);
 }
 
+// Kill feedback (enemy down, double kill ... pentakill). The online server routes it to the killer's client.
+function killStreak(s, n) { if (s === G.player && typeof announceKill === 'function') announceKill(n); }
 function message(text, color = '#e3e7df', t = 3.5) { G.msg = { text, color, t, max: t }; }
 function feed(text, color) { G.feed.unshift({ text, color, t: 7 }); if (G.feed.length > 6) G.feed.pop(); }
 // Messages meant for one team or one soldier. Offline they show only when they concern the local player;
@@ -122,6 +124,7 @@ function finishReload(s) {
 }
 function shoot(s, moving) {
   const spread = currentSpread(s, moving);
+  s.steady = false; s.steadyT = 0;   // the first shot is dead on; the next ones spread until you hold still again
   const a = s.angle + (Math.random() - 0.5) * 2 * spread;
   const pa = clamp(s.pitch + (Math.random() - 0.5) * 2 * spread * CFG.V_SPREAD, -1.4, 1.4);
   const mx = s.x + Math.cos(s.angle) * 18, my = s.y + Math.sin(s.angle) * 18, mz = eyeZ(s) - 3;
@@ -129,15 +132,18 @@ function shoot(s, moving) {
   G.bullets.push({ x: mx, y: my, z: mz, px: mx, py: my, vx: Math.cos(a) * sp * cp, vy: Math.sin(a) * sp * cp, vz: Math.sin(pa) * sp,
     life: s.cls.range / sp, team: s.team, owner: s, dmg: s.cls.dmg * s.mods.dmg, sniper: s.cls === CLASSES.sniper });
   s.mag--; s.fireCD = 1 / s.cls.rate; s.heat = Math.min(0.05, s.heat + (s.cls.auto ? 0.008 : 0.03));
-  G.particles.push({ type: 'flash', x: mx, y: my, a: s.angle, life: 0.05, max: 0.05 });
+  const sn = s.cls === CLASSES.sniper;   // the sniper's muzzle flash is much brighter and easier to spot
+  G.particles.push({ type: 'flash', x: mx, y: my, z: mz, a: s.angle, life: sn ? 0.14 : 0.05, max: sn ? 0.14 : 0.05, big: sn });
   if (Math.random() < 0.5) stampCasing(G.art, s.x + Math.cos(s.angle + 1.6) * 16, s.y + Math.sin(s.angle + 1.6) * 16);
   SFX.shot(s.x, s.y, s.isPlayer);
 }
 
 // Heights in the world: the floor a soldier stands on, and their eyes.
-function feetZ(s) { return elevAt(G.m, s.x, s.y) + (s.z || 0); }
-function eyeZ(s) { return feetZ(s) + CFG.EYE; }
-function chestZ(s) { return feetZ(s) + CFG.BODY_H * 0.62; }
+function feetZ(s) { return elevAt(G.m, s.x, s.y) + (s.z || 0) + (s.para || 0); }
+function eyeZ(s) { return feetZ(s) + (s.crouch ? CFG.CROUCH_EYE : CFG.EYE); }
+function bodyH(s) { return s.crouch ? CFG.CROUCH_BODY : CFG.BODY_H; }
+function headH(s) { return s.crouch ? CFG.CROUCH_HEAD : CFG.HEAD_H; }
+function chestZ(s) { return feetZ(s) + bodyH(s) * 0.62; }
 // Floors: a staircase ramps between the ground floor and the upper floor of a two-storey house.
 // Walking into the side of the staircase from below is blocked (px, py: position before this step).
 function updateFloor(m, s, px, py) {
@@ -163,9 +169,11 @@ function slopeFactor(s) {
   return 1;
 }
 function currentSpread(s, moving) {
+  if (s.steady) return 0;
   let sp = (moving ? s.cls.spreadMove : s.cls.spread) * s.mods.spread + s.heat;
   if (s.scoped) sp *= s.cls.scopeSpread;
   else if (s.ads) sp /= CFG.ADS_ACC;
+  if (s.crouch) sp /= CFG.CROUCH_ACC;
   return sp * slopeFactor(s);
 }
 
@@ -184,7 +192,14 @@ function kill(s, killer) {
   s.alive = false; s.hp = 0; s.deaths++;
   s.reloading = false; s.act = null; s.scoped = false;
   stampBody(G.art, s);
-  if (killer && killer !== s) { killer.kills++; }
+  if (killer && killer !== s) {
+    killer.kills++;
+    if (killer.team !== s.team) {
+      killer.streak = G.time - killer.lastKillT <= CFG.STREAK_T ? Math.min(5, killer.streak + 1) : 1;
+      killer.lastKillT = G.time;
+      killStreak(killer, killer.streak);
+    }
+  }
   const kn = killer ? killer.name : 'Explosion';
   const kc = killer ? TEAMS[killer.team].color : '#e6ad45';
   feed(`${kn}  ✕  ${s.name}`, kc);
@@ -201,11 +216,16 @@ function updateSoldier(s, dt, ctl) {
   s.cacheCD -= dt;
   s.heat = Math.max(0, s.heat - dt * 0.08);
   let mvx = ctl.mx || 0, mvy = ctl.my || 0;
+  // crouching (Ctrl): steadier aim, but you stay where you are
+  s.crouch = !!(ctl.crouch && !(s.para > 0));
+  if (s.crouch) { mvx = 0; mvy = 0; }
   const ml = Math.hypot(mvx, mvy);
   if (ml > 1) { mvx /= ml; mvy /= ml; }
   const moving = ml > 0.1;
   const fire = ctl.fire;
-  const sprint = ctl.sprint && moving && !fire && !s.reloading && !(ctl.scope && !s.cls.scopeRange);
+  const sprint = ctl.sprint && moving && !fire && !s.reloading && !(ctl.scope && !s.cls.scopeRange) && !(s.para > 0);
+  // hold still without shooting for STEADY_T seconds and the next shot is dead accurate again
+  if (moving || fire) s.steadyT = 0; else if ((s.steadyT += dt) >= CFG.STEADY_T) s.steady = true;
 
   if (ctl.aimX !== undefined) { s.aimX = ctl.aimX; s.aimY = ctl.aimY; }
   if (ctl.pitch !== undefined) s.pitch = clamp(ctl.pitch, -1.4, 1.4);
@@ -232,13 +252,15 @@ function updateSoldier(s, dt, ctl) {
   if (s.reloading) speed *= 0.85;
   if (fire) speed *= 0.8;
   if (s.ads) speed *= CFG.ADS_SPEED;
+  if (s.para > 0) speed = CFG.WALK * 0.6;   // steering the parachute
   const k = 1 - Math.exp(-dt * 14);
   s.vx = lerp(s.vx, mvx * speed, k); s.vy = lerp(s.vy, mvy * speed, k);
   const ox = s.x, oy = s.y;
   s.x += s.vx * dt; s.y += s.vy * dt;
   collideCircle(m, s, CFG.R);
-  updateFloor(m, s, ox, oy);
-  if (moving) s.walkPhase += dt * speed * 0.12;
+  if (s.para > 0) { s.para = Math.max(0, s.para - CFG.PARA_FALL * dt); s.z = 0; }
+  else updateFloor(m, s, ox, oy);
+  if (moving && !(s.para > 0)) s.walkPhase += dt * speed * 0.12;
 
   s.fireCD -= dt;
   if (fire && !sprint && !busy) {
@@ -312,8 +334,9 @@ function destroyBridge(team, attacker) {
   G.teams[1 - team].points += CFG.SABOTAGE_REWARD;
   if (attacker) attacker.points += CFG.SABOTAGE_REWARD;
   feed(`${TEAMS[team].name}'s bridge destroyed`, TEAMS[1 - team].color);
-  msgFor(team, 'Our bridge is down. No more trucks or reinforcements', '#ff5a4e', 5);
-  msgFor(1 - team, 'Enemy bridge destroyed. They can no longer reinforce', TEAMS[1 - team].color, 5);
+  G.teams[team].paraT = CFG.PARA_INTERVAL;
+  msgFor(team, `Our bridge is down. Reinforcements now parachute over our points, ${CFG.PARA_N} every ${CFG.PARA_INTERVAL} s`, '#ff5a4e', 5);
+  msgFor(1 - team, 'Enemy bridge destroyed. They can only parachute in over the points they hold', TEAMS[1 - team].color, 5);
 }
 
 // ---------------- Drops
@@ -390,8 +413,8 @@ function update(dt) {
   }
   if (lockTeam >= 0) { G.lock.t += dt; if (G.lock.t >= CFG.WIN_HOLD) return endMatch(lockTeam, 'Held all five points at once'); }
   for (let t = 0; t < 2; t++) {
-    if (m.bridges[t].destroyed && !G.trucks.some(k => k.team === t) && !G.carts.some(c => c.team === t) && !G.soldiers.some(s => s.team === t && s.alive))
-      return endMatch(1 - t, `${TEAMS[t].name} was wiped out with no bridge left to reinforce`);
+    if (m.bridges[t].destroyed && !G.trucks.some(k => k.team === t) && !G.carts.some(c => c.team === t) && !G.soldiers.some(s => s.team === t && s.alive) && !m.points.some(p => p.owner === t))
+      return endMatch(1 - t, `${TEAMS[t].name} was wiped out with no bridge and no point to parachute onto`);
   }
   if (G.time >= CFG.TIME_LIMIT) {
     const h0 = m.points.filter(p => p.owner === 0).length, h1 = m.points.filter(p => p.owner === 1).length;
@@ -415,8 +438,8 @@ function updateBullets(dt) {
       const t = segCircleHit(b.x, b.y, nx, ny, s.x, s.y, CFG.R);
       if (t < 0 || t >= bestT) continue;
       const bz = b.z + (nz - b.z) * t, fz = feetZ(s);
-      if (bz < fz - 2 || bz > fz + CFG.BODY_H + 2) continue;
-      bestT = t; bestS = s; head = bz > fz + CFG.HEAD_H;
+      if (bz < fz - 2 || bz > fz + bodyH(s) + 2) continue;
+      bestT = t; bestS = s; head = bz > fz + headH(s);
     }
     for (const c of G.carts) {
       if (c.team === b.team) continue;
@@ -505,9 +528,13 @@ function onCapture(p, t) {
   G.stats.captures[t]++;
   for (const s of G.soldiers) if (s.alive && s.team === t && dist2(s.x, s.y, p.x, p.y) < CFG.CAP_R * CFG.CAP_R) s.points += CFG.CAPTURER_REWARD;
   feed(`${TEAMS[t].name} captured ${p.name}  +${CFG.CAPTURE_REWARD} pts`, TEAMS[t].color);
-  msgFor(t, `Point ${p.name} captured`, TEAMS[t].color, 2.5);
   msgFor(1 - t, `Point ${p.name} lost`, TEAMS[t].color, 2.5);
   if (G.player) SFX.capture(t === G.player.team);
+  // an ammo crate for the first CAP_AMMO soldiers who reach it
+  for (const c of G.caches.slice()) if (c.ammo && dist(c.x, c.y, p.x, p.y) < CFG.CAP_R) G.caches.splice(G.caches.indexOf(c), 1);
+  const f = randomFreeNear(G.m, p.x, p.y, 50);
+  G.caches.push({ team: t, x: f.x, y: f.y, charges: CFG.CAP_AMMO, ammo: true });
+  msgFor(t, `Point ${p.name} captured. Ammo crate for ${CFG.CAP_AMMO} at the point`, TEAMS[t].color, 3);
   for (const s of G.soldiers) if (s.bot) s.bot.objT = Math.min(s.bot.objT, Math.random() * 1.5);
 }
 
@@ -515,7 +542,7 @@ function updateSupply(dt) {
   const m = G.m;
   for (let t = 0; t < 2; t++) {
     const tm = G.teams[t];
-    if (m.bridges[t].destroyed) continue;
+    if (m.bridges[t].destroyed) { updateParachutes(t, dt); continue; }
     tm.supplyT -= dt;
     if (tm.supplyT <= 0) {
       tm.supplyT = CFG.SUPPLY_INTERVAL;
@@ -551,6 +578,14 @@ function updateSupply(dt) {
     for (const s of G.soldiers) {
       if (!s.alive || s.team !== c.team || s.cacheCD > 0 || c.charges <= 0) continue;
       if (dist2(s.x, s.y, c.x, c.y) > 80 * 80) continue;
+      if (c.ammo) {
+        if (ammoTotal(s) >= ammoFull(s)) continue;
+        c.charges--; s.cacheCD = 6;
+        const m0 = s.mag; refillAmmo(s); s.mag = Math.max(m0, s.mag);
+        msgTo(s, `Ammo crate: full ammo (${c.charges} left)`, '#7fd18b', 2);
+        if (s.isPlayer) SFX.pickup();
+        continue;
+      }
       if (s.hp >= maxHp(s) && ammoTotal(s) >= ammoFull(s)) continue;
       c.charges--; s.cacheCD = 6;
       s.hp = maxHp(s); refillAmmo(s);
@@ -559,6 +594,27 @@ function updateSupply(dt) {
     }
   }
   G.caches = G.caches.filter(c => c.charges > 0);
+}
+
+// Bridge down: every PARA_INTERVAL s up to PARA_N dead soldiers parachute in 20 m above a point the team holds.
+function updateParachutes(t, dt) {
+  const tm = G.teams[t], m = G.m;
+  tm.paraT -= dt;
+  if (tm.paraT > 0) return;
+  tm.paraT = CFG.PARA_INTERVAL;
+  const held = m.points.filter(p => p.owner === t);
+  const dead = G.soldiers.filter(s => s.team === t && !s.alive && !s.riding).slice(0, CFG.PARA_N);
+  if (!held.length || !dead.length) return;
+  for (const s of dead) {
+    const p = pickRand(held);
+    let f = null;
+    for (let k = 0; k < 20 && !f; k++) { const c = randomFreeNear(m, p.x + rand(-90, 90), p.y + rand(-90, 90), 110); if (!houseAt(m, c.x, c.y)) f = c; }
+    f = f || randomFreeNear(m, p.x, p.y, 140);
+    spawnSoldier(s, { type: 'at', x: f.x, y: f.y });
+    s.x = f.x; s.y = f.y; s.para = CFG.PARA_H; s.shield = CFG.SPAWN_SHIELD;
+    msgTo(s, `Parachuting in over point ${p.name}`, TEAMS[t].color, 3);
+  }
+  feedFor(t, `${dead.length} soldier${dead.length > 1 ? 's' : ''} parachuting in`, TEAMS[t].color);
 }
 
 function updateDrops(dt) {

@@ -20,7 +20,7 @@ const menu = {
 function isTyping() { const a = document.activeElement; return a && a.tagName === 'INPUT'; }
 window.addEventListener('keydown', e => {
   if (isTyping()) return;
-  if (e.code === 'Tab' || e.code === 'Space') e.preventDefault();
+  if (e.code === 'Tab' || e.code === 'Space' || ((e.code === 'ControlLeft' || e.code === 'ControlRight') && G && !G.over)) e.preventDefault();
   keys.add(e.code);
   if (!G || G.over || G.state !== 'play') return;
   if (e.code === 'Escape' && G.targeting) { G.targeting = false; if (G.mapForStrike) { G.showMap = false; G.mapForStrike = false; } }
@@ -44,6 +44,8 @@ window.addEventListener('keydown', e => {
   else if (e.code === 'Tab') G.showScores = true;
 });
 window.addEventListener('keyup', e => { keys.delete(e.code); if (e.code === 'Tab' && G) G.showScores = false; });
+// Ctrl is crouch: Ctrl+W would close the tab, so ask before leaving a running match
+window.addEventListener('beforeunload', e => { if (G && !G.over) { e.preventDefault(); e.returnValue = ''; } });
 window.addEventListener('blur', () => { keys.clear(); mouse.down = false; mouse.right = false; });
 // ---------- first-person mouse look (pointer lock)
 const look = R3.look;
@@ -110,8 +112,11 @@ function playerControl(s) {
   // right click / Q: the sniper scope (hold still), or aim down the sights with any other gun
   const scope = mouse.right || keys.has('KeyQ');
   if (scope && s.cls.scopeRange) { mx = 0; my = 0; }   // scoping means holding position
+  // Ctrl (or C): crouch in place for a steadier aim
+  const crouch = keys.has('ControlLeft') || keys.has('ControlRight') || keys.has('KeyC');
+  if (crouch) { mx = 0; my = 0; }
   const tgt = lookTarget(s, 1500);
-  const ctl = { mx, my, fire: mouse.down && !G.paused && !G.showMap, sprint: keys.has('ShiftLeft') || keys.has('ShiftRight'), reload: reloadPressed, interact: keys.has('KeyF'),
+  const ctl = { mx, my, crouch, fire: mouse.down && !G.paused && !G.showMap, sprint: keys.has('ShiftLeft') || keys.has('ShiftRight'), reload: reloadPressed, interact: keys.has('KeyF'),
     scope, aimX: tgt.x, aimY: tgt.y, pitch: look.pitch, throwAt: null };
   if (throwPressed) {
     // throw toward where you look, up to the grenade range (looking up throws as far as possible)
@@ -336,7 +341,12 @@ function updateRespawnDock() {
   const spec = spectateTarget();
   const specTxt = spec && !P.riding ? ` Spectating ${spec.name}: click or Space to switch.` : '';
   if (P.riding) msg = `Riding the transport to point ${P.riding.target.name} (${Math.ceil(P.riding.hp)} HP). Press E to jump out early.`;
-  else if (G.m.bridges[t].destroyed) msg = 'You were killed. Our bridge is down, so no more reinforcements can arrive.' + specTxt;
+  else if (G.m.bridges[t].destroyed) {
+    const held = G.m.points.filter(p => p.owner === t).length;
+    msg = held ? `You were killed. Our bridge is down: the next parachute drop (${CFG.PARA_N} soldiers over a point we hold) is in ${Math.ceil(tm.paraT || 0)} s.`
+      : 'You were killed. Our bridge is down and we hold no point to parachute onto. Your team must take one back.';
+    msg += specTxt;
+  }
   else if (truck) msg = 'You were killed. Your truck is crossing the bridge now.' + specTxt;
   else {
     const lane = G.m.truckLanes[t];

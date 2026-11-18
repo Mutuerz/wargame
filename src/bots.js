@@ -8,7 +8,7 @@ function newBrain() {
     burst: 0, pause: 0, strafeDir: 1, strafeT: 0, lookA: 0, lookT: 0,
     stuckClock: 0, lx: 0, ly: 0, stuck: 0, nudgeT: 0, nudgeA: 0,
     bias: [0, 0, 0, 0, 0].map(() => Math.random() * 900),
-    defender: Math.random() < 0.2, role: null,
+    defender: Math.random() < 0.2, role: null, croucher: Math.random() < 0.4,
   };
 }
 function resetBrain(s) {
@@ -28,7 +28,7 @@ function scan(s) {
     if (d >= bd) continue;
     if (d > near * near && Math.abs(angDiff(s.angle, Math.atan2(e.y - s.y, e.x - s.x))) > s.cls.scopeCone) continue;
     // aim at the chest, or at the head when only the head shows over cover
-    const ez = eyeZ(s), cz = chestZ(e), hz = feetZ(e) + CFG.BODY_H - 5;
+    const ez = eyeZ(s), cz = chestZ(e), hz = feetZ(e) + bodyH(e) - 5;
     let az = cz;
     if (!los3(G.m, s.x, s.y, ez, e.x, e.y, cz)) { if (!los3(G.m, s.x, s.y, ez, e.x, e.y, hz)) continue; az = hz; }
     bd = d; best = e; b.aimZ = az - feetZ(e);
@@ -75,7 +75,7 @@ function chooseObjective(s) {
   const need = ammo < Math.min(30, s.cls.mag * 1.2) || s.hp < hpMax * 0.5;
   const want = ammo < ammoFull(s) - 10 || s.hp < hpMax * 0.85;
   let tgt = null, td = Infinity;
-  for (const c of G.caches) if (c.team === t) { const d = dist(s.x, s.y, c.x, c.y); if (d < td) { td = d; tgt = c; } }
+  for (const c of G.caches) if (c.team === t && !(c.ammo && ammo >= ammoFull(s) * 0.6)) { const d = dist(s.x, s.y, c.x, c.y); if (d < td) { td = d; tgt = c; } }
   for (const d of G.drops) if (d.fall <= 0) { const dd = dist(s.x, s.y, d.x, d.y); if (dd < td) { td = dd; tgt = d; } }
   if (tgt && ((need && td < 2600) || (want && td < 650))) { b.obj = { type: 'supply', x: tgt.x, y: tgt.y }; return; }
   // 4. capture points
@@ -236,6 +236,8 @@ function botThink(s, dt) {
     // snipers hold still and scope in at range
     if (sniper && b.vis && d > 450) { moveX = 0; moveY = 0; ctl.scope = true; }
     else if (!sniper && b.vis && d > 380) ctl.scope = true;   // aim down the sights at range
+    // some bots crouch for a steadier shot at long range (not upstairs: the window sill would block them)
+    if (b.vis && b.croucher && d > 550 && s.z === 0 && !(s.para > 0) && G.time - s.lastHitT > 1.5) { ctl.crouch = true; moveX = 0; moveY = 0; }
     // sappers and defusers keep pushing to their goal while fighting
     if (b.obj && (b.obj.type === 'plant' || b.obj.type === 'defuse') && d > 300) {
       const [fx, fy] = followPath(s, b.obj.x, b.obj.y, dt);
@@ -280,13 +282,13 @@ function botThink(s, dt) {
   for (const g of G.grenades) {
     if (g.team === s.team) continue;
     const dx = s.x - g.x, dy = s.y - g.y, d = Math.hypot(dx, dy) || 1;
-    if (d < CFG.GRENADE_RADIUS + 40 && g.fuse < 3.5) { moveX = dx / d; moveY = dy / d; ctl.sprint = true; ctl.scope = false; ctl.interact = false; }
+    if (d < CFG.GRENADE_RADIUS + 40 && g.fuse < 3.5) { moveX = dx / d; moveY = dy / d; ctl.sprint = true; ctl.scope = false; ctl.interact = false; ctl.crouch = false; }
   }
   // clear out of announced air strike zones (both sides can see the marker)
   for (const st of G.strikes) {
     if (st.t > 8 || !inStrike(st, s.x, s.y, 50)) continue;
     const dy = s.y >= st.y ? 1 : -1;
-    moveX = 0; moveY = dy; ctl.sprint = true; ctl.scope = false; ctl.interact = false;
+    moveX = 0; moveY = dy; ctl.sprint = true; ctl.scope = false; ctl.interact = false; ctl.crouch = false;
   }
   if (b.nudgeT > 0) { b.nudgeT -= dt; moveX = Math.cos(b.nudgeA); moveY = Math.sin(b.nudgeA); }
 

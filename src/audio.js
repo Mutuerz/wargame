@@ -16,6 +16,7 @@ const SFX = {
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
       this.noise = buf;
       this.startWind();
+      loadVoiceFiles();
     } catch (e) { this.ctx = null; }
   },
   toggle() { this.on = !this.on; if (this.master) this.master.gain.value = this.on ? 0.45 : 0; return this.on; },
@@ -69,3 +70,49 @@ const SFX = {
     src.connect(f); f.connect(g); g.connect(this.master); src.start();
   },
 };
+
+// ---------- kill callouts: "Enemy down", "Double kill" ... "Pentakill"
+// If sfx/voice/<key>.mp3 files exist (any announcer recording you like), they are played; otherwise the
+// browser's own speech voice reads the line, pitched down, over a synthesized sting.
+const KILL_LINES = [null, ['kill', 'ENEMY DOWN', 'Enemy down'], ['double', 'DOUBLE KILL', 'Double kill!'], ['triple', 'TRIPLE KILL', 'Triple kill!'],
+  ['quadra', 'QUADRA KILL', 'Quadra kill!'], ['penta', 'PENTAKILL', 'Penta kill!']];
+const VOICE = { files: {}, tried: false, pick: null };
+function loadVoiceFiles() {
+  if (VOICE.tried) return; VOICE.tried = true;
+  for (let i = 1; i < KILL_LINES.length; i++) {
+    const k = KILL_LINES[i][0], a = new Audio();
+    a.preload = 'auto';
+    a.oncanplaythrough = () => { VOICE.files[k] = a; };
+    a.onerror = () => { delete VOICE.files[k]; };
+    a.src = `sfx/voice/${k}.mp3`;
+  }
+}
+function announcerVoice() {
+  if (VOICE.pick !== null || !window.speechSynthesis) return VOICE.pick;
+  const vs = speechSynthesis.getVoices().filter(v => /^en/i.test(v.lang));
+  if (!vs.length) return null;
+  VOICE.pick = vs.find(v => /male|daniel|david|guy|fred|alex|george|arthur|james/i.test(v.name) && !/female/i.test(v.name)) || vs[0];
+  return VOICE.pick;
+}
+function announceKill(n) {
+  n = clamp(n | 0, 1, 5);
+  const [key, text, said] = KILL_LINES[n];
+  if (G) G.killFx = { n, text, t: n > 1 ? 2.2 : 1.4, max: n > 1 ? 2.2 : 1.4 };
+  if (!SFX.ok()) return;
+  // sting: a deep hit, brighter and longer for bigger streaks
+  SFX.tone(0.35, 150, 50, 0.35 + n * 0.08, 'sawtooth');
+  SFX.burst(0.25, 900, 0.8, 0.25);
+  if (n > 1) setTimeout(() => SFX.ok() && SFX.tone(0.16, 440 + n * 110, 880 + n * 220, 0.25 + n * 0.05, 'triangle'), 90);
+  if (n === 1) return;   // a single kill gets the sting only; the voice is for multi-kills
+  const f = VOICE.files[key];
+  if (f) { try { f.currentTime = 0; f.volume = 0.9; f.play(); } catch (e) { } return; }
+  if (!window.speechSynthesis) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(said);
+    const v = announcerVoice(); if (v) u.voice = v;
+    u.pitch = 0.35; u.rate = n >= 5 ? 0.8 : 0.95; u.volume = 1;
+    speechSynthesis.speak(u);
+  } catch (e) { }
+}
+if (window.speechSynthesis) speechSynthesis.onvoiceschanged = () => { VOICE.pick = null; };

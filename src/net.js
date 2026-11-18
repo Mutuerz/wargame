@@ -187,6 +187,7 @@ const NET = {
     P.hp = me.hp; P.mag = me.mag; P.mags = me.mags; P.nades = me.nades; P.c4 = me.c4;
     P.reloading = !!me.rl; P.reloadT = me.rlT; P.reloadMax = me.rlM || 1; P.act = me.act; P.actT = me.actT;
     P.points = me.pts; P.shield = me.sh; P.cls = CLASSES[me.cls] || P.cls;
+    if (performance.now() - (this.shotAt || 0) > 400) P.steady = !!me.st;   // a local shot wins until the server catches up
     if (P.reloading && !this.wasReloading) SFX.reload();
     this.wasReloading = P.reloading;
     P.riding = me.ride ? this.cartObj(me.ride) : null;
@@ -196,7 +197,7 @@ const NET = {
     if (!me.alive) { this.pending = []; this.pred = null; if (P.riding) { P.x = P.riding.x; P.y = P.riding.y; } return; }
     const shownX = this.pred ? this.pred.x + this.off.x : me.x, shownY = this.pred ? this.pred.y + this.off.y : me.y;
     const pr = this.pred || (this.pred = { x: me.x, y: me.y, z: 0, vx: 0, vy: 0, walkPhase: 0 });
-    pr.x = me.x; pr.y = me.y; pr.z = me.z || 0; pr.vx = me.vx; pr.vy = me.vy;
+    pr.x = me.x; pr.y = me.y; pr.z = me.z || 0; pr.vx = me.vx; pr.vy = me.vy; pr.para = me.pa || 0;
     pr.reloading = P.reloading; pr.cls = P.cls; pr.mods = P.mods;
     this.pending = this.pending.filter(i => i.seq > me.ack);
     for (const i of this.pending) netMove(pr, i, NET_STEP);
@@ -215,7 +216,7 @@ const NET = {
     if (k === 'b') {
       const [, x, y, vx, vy, life, team, sniper, owner, z, vz] = e;
       G.bullets.push({ x, y, z: z || 0, vx, vy, vz: vz || 0, life, team, sniper: !!sniper, mine: owner === P.id });
-      G.particles.push({ type: 'flash', x, y, a: Math.atan2(vy, vx), life: 0.05, max: 0.05 });
+      G.particles.push({ type: 'flash', x, y, z: z || undefined, a: Math.atan2(vy, vx), life: sniper ? 0.14 : 0.05, max: sniper ? 0.14 : 0.05, big: !!sniper });
       if (Math.random() < 0.5) { const a = Math.atan2(vy, vx); stampCasing(G.art, x - Math.cos(a) * 26 + Math.cos(a + 1.6) * 16, y - Math.sin(a) * 26 + Math.sin(a + 1.6) * 16); }
       SFX.shot(x, y, owner === P.id);
     } else if (k === 'hit') {
@@ -244,6 +245,7 @@ const NET = {
     else if (k === 'cap') { G.stats.captures[e[1]]++; SFX.capture(e[1] === P.team); }
     else if (k === 'm') { message(e[1], e[2], e[3]); if (e[4]) SFX.pickup(); }
     else if (k === 'f') feed(e[1], e[2]);
+    else if (k === 'ks') announceKill(e[1]);
   },
 
   onOver(m) {
@@ -283,7 +285,7 @@ const NET = {
       const k = Math.exp(-dt * 10); this.off.x *= k; this.off.y *= k;
       const nx = this.pred.x + this.off.x, ny = this.pred.y + this.off.y;
       P.walkPhase += Math.hypot(nx - P.x, ny - P.y) * 0.12;
-      P.x = nx; P.y = ny; P.z = this.pred.z; P.vx = this.pred.vx; P.vy = this.pred.vy;
+      P.x = nx; P.y = ny; P.z = this.pred.z; P.para = this.pred.para || 0; P.vx = this.pred.vx; P.vy = this.pred.vy;
     }
     netUpdateBullets(dt);
     updateParticles(dt);
@@ -302,8 +304,9 @@ const NET = {
     if (!P.alive || G.over) { reloadPressed = false; throwPressed = false; return; }
     const ctl = playerControl(P);
     P.aimX = ctl.aimX; P.aimY = ctl.aimY;
-    const flags = (ctl.fire ? 1 : 0) | (ctl.sprint ? 2 : 0) | (ctl.interact ? 4 : 0) | (ctl.scope ? 8 : 0);
-    const inp = { seq: ++this.seq, mx: ctl.mx, my: ctl.my, fire: !!ctl.fire, sprint: !!ctl.sprint, ads: !!(ctl.scope && !P.cls.scopeRange) };
+    const flags = (ctl.fire ? 1 : 0) | (ctl.sprint ? 2 : 0) | (ctl.interact ? 4 : 0) | (ctl.scope ? 8 : 0) | (ctl.crouch ? 16 : 0);
+    const inp = { seq: ++this.seq, mx: ctl.mx, my: ctl.my, fire: !!ctl.fire, sprint: !!ctl.sprint, ads: !!(ctl.scope && !P.cls.scopeRange), crouch: !!ctl.crouch };
+    if (ctl.fire && P.mag > 0 && !P.reloading) { P.steady = false; this.shotAt = performance.now(); }
     this.send({ t: 'i', d: [0, inp.seq, ctl.mx, ctl.my, flags, Math.round(ctl.aimX), Math.round(ctl.aimY), Math.round(ctl.pitch * 1000)] });
     if (ctl.reload) this.act({ a: 'reload' });
     if (ctl.throwAt) this.act({ a: 'throw', x: Math.round(ctl.throwAt.x), y: Math.round(ctl.throwAt.y) });
@@ -311,6 +314,7 @@ const NET = {
     const moving = Math.hypot(ctl.mx, ctl.my) > 0.1;
     P.scoped = !!(ctl.scope && P.cls.scopeRange && !moving && !P.reloading);
     P.ads = !!(ctl.scope && !P.cls.scopeRange && !P.reloading);
+    P.crouch = !!(ctl.crouch && !(P.para > 0));
   },
 
   // Positions of everything except your own soldier, interpolated between the two snapshots around renderT.
@@ -333,10 +337,10 @@ const NET = {
       const na = A.solMap.get(s.id) || nb;
       const x = L(na[1], nb[1]), y = L(na[2], nb[2]);
       if (s.alive && s.x > -9000) s.walkPhase += Math.hypot(x - s.x, y - s.y) * 0.12;
-      s.alive = true; s.x = x; s.y = y; s.z = L(na[8] || 0, nb[8] || 0); s.pitch = nb[9] || 0; s.angle = LA(na[3], nb[3]);
+      s.alive = true; s.x = x; s.y = y; s.z = L(na[8] || 0, nb[8] || 0); s.pitch = nb[9] || 0; s.para = L(na[10] || 0, nb[10] || 0); s.angle = LA(na[3], nb[3]);
       s.hp = nb[4];
       const fl = nb[5];
-      s.reloading = !!(fl & 1); s.scoped = !!(fl & 2); s.shield = fl & 4 ? 1 : 0;
+      s.reloading = !!(fl & 1); s.scoped = !!(fl & 2); s.crouch = !!(fl & 64); s.shield = fl & 4 ? 1 : 0;
       s.c4 = fl & 8 ? 1 : 0; s.bot = fl & 8 ? { role: 'sapper' } : null;
       s.act = fl & 16 ? 'plant' : null; s.actT = nb[7] * CFG.C4_PLANT;
       s.reloadMax = 1; s.reloadT = 1 - nb[6];
@@ -344,7 +348,7 @@ const NET = {
     }
     // points, team counters, objectives (latest values)
     B.pts.forEach((p, i) => { const mp = G.m.points[i]; mp.owner = p[0]; mp.prog = p[1]; mp.c0 = p[2]; mp.c1 = p[3]; });
-    B.tm.forEach((t, i) => { G.teams[i].points = t[0]; G.teams[i].supplyT = t[1]; });
+    B.tm.forEach((t, i) => { G.teams[i].points = t[0]; G.teams[i].supplyT = t[1]; G.teams[i].paraT = t[2] || 0; });
     G.lock = { team: B.lock[0], t: B.lock[1] };
     const byId = (arr, i) => new Map(arr.map(a => [a[i], a]));
     const ta = byId(A.trk, 0);
@@ -363,7 +367,7 @@ const NET = {
     G.c4s = B.c4.map(c => ({ x: c[0], y: c[1], fuse: c[2], bridge: c[3], team: c[4], beep: c[5] }));
     const oldDrops = new Map(G.drops.map(d => [d.nid, d]));
     G.drops = B.drops.map(d => { const o = oldDrops.get(d[0]); return { nid: d[0], x: d[1], y: d[2], fall: d[3], c4: !!d[4], t: o ? o.t : Math.random() * 10 }; });
-    G.caches = B.caches.map(c => ({ team: c[0], x: c[1], y: c[2], charges: c[3], depot: !!c[4] }));
+    G.caches = B.caches.map(c => ({ team: c[0], x: c[1], y: c[2], charges: c[3], depot: !!c[4], ammo: !!c[5] }));
     G.strikes = B.str.map(s => ({ team: s[0], x: s[1], y: s[2], t: s[3], dir: s[4] }));
   },
 };
@@ -371,21 +375,25 @@ const NET = {
 // Same movement rules as updateSoldier() in game.js, for prediction.
 function netMove(s, inp, dt) {
   let mvx = inp.mx || 0, mvy = inp.my || 0;
+  const falling = s.para > 0;
+  if (inp.crouch && !falling) { mvx = 0; mvy = 0; }
   const ml = Math.hypot(mvx, mvy);
   if (ml > 1) { mvx /= ml; mvy /= ml; }
   const moving = ml > 0.1;
-  const sprint = inp.sprint && moving && !inp.fire && !s.reloading && !inp.ads;
+  const sprint = inp.sprint && moving && !inp.fire && !s.reloading && !inp.ads && !falling;
   let speed = (sprint ? CFG.SPRINT : CFG.WALK) * s.mods.speed * s.cls.speed;
   if (G.m.slow[((s.y / CELL) | 0) * GW + ((s.x / CELL) | 0)]) speed *= 0.5;
   if (s.reloading) speed *= 0.85;
   if (inp.fire) speed *= 0.8;
   if (inp.ads && !s.reloading) speed *= CFG.ADS_SPEED;
+  if (falling) speed = CFG.WALK * 0.6;
   const k = 1 - Math.exp(-dt * 14);
   s.vx = lerp(s.vx, mvx * speed, k); s.vy = lerp(s.vy, mvy * speed, k);
   const ox = s.x, oy = s.y;
   s.x += s.vx * dt; s.y += s.vy * dt;
   collideCircle(G.m, s, CFG.R);
-  updateFloor(G.m, s, ox, oy);
+  if (falling) { s.para = Math.max(0, s.para - CFG.PARA_FALL * dt); s.z = 0; }
+  else updateFloor(G.m, s, ox, oy);
 }
 
 // Tracers are cosmetic on the client: they stop at walls and soldiers, the server decides the hits.
@@ -399,7 +407,7 @@ function netUpdateBullets(dt) {
       const t = segCircleHit(b.x, b.y, nx, ny, s.x, s.y, CFG.R);
       if (t < 0 || t >= bestT) continue;
       const bz = b.z + (nz - b.z) * t, fz = feetZ(s);
-      if (bz >= fz - 2 && bz <= fz + CFG.BODY_H + 2) bestT = t;
+      if (bz >= fz - 2 && bz <= fz + bodyH(s) + 2) bestT = t;
     }
     let hit = bestT <= 1, pz = b.z;
     const steps = Math.ceil(Math.hypot(nx - b.x, ny - b.y) / 8);

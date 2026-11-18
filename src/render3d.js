@@ -446,8 +446,16 @@ function makeSoldierModel(team, clsKey) {
   const gun = gunMesh(clsKey, gunM); gun.position.set(6, -1, 2);
   arms.add(armL, armR, gun);
   body.add(legL, legR, torso, pack, head, helmet, band, arms);
+  // parachute canopy and lines, shown while dropping in
+  const chute = new THREE.Group();
+  const canopy = new THREE.Mesh(new THREE.SphereGeometry(34, 14, 6, 0, TAU, 0, Math.PI / 2.4), lam(shade(T.color, 0.75), { side: THREE.DoubleSide }));
+  canopy.scale.y = 0.55; canopy.position.y = 92; chute.add(canopy);
+  const lineM = new THREE.LineBasicMaterial({ color: '#2a2a2a' }), pts = [];
+  for (let i = 0; i < 6; i++) { const a = i / 6 * TAU; pts.push(new THREE.Vector3(0, 30, 0), new THREE.Vector3(Math.cos(a) * 28, 98, Math.sin(a) * 28)); }
+  chute.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), lineM));
+  chute.visible = false; g.add(chute);
   g.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
-  g.userData = { body, legL, legR, arms, cls: clsKey, team };
+  g.userData = { body, legL, legR, arms, chute, cls: clsKey, team };
   return g;
 }
 function soldierObj(s) {
@@ -539,12 +547,23 @@ function updateDynamic(dt) {
   }
   dp.done();
   const kp = pool('cache', () => { const g = new THREE.Group(); for (let i = 0; i < 6; i++) { const b = meshBox(22, 20, 22, '#7b6a43'); b.position.set((i % 3) * 24 - 24, i > 2 ? 20 : 0, 0); g.add(b); } return g; });
+  // ammo crates left on a captured point: green boxes with a yellow band, one per soldier they can serve
+  const ap = pool('ammo', () => {
+    const g = new THREE.Group();
+    for (let i = 0; i < 2; i++) { const b = new THREE.Group(); b.add(meshBox(30, 16, 18, '#44532f'), meshBox(31, 3, 19, '#e6ad45', 6)); b.position.set(i * 34 - 17, 0, 0); g.add(b); }
+    return g;
+  });
   for (const c of G.caches) {
+    if (c.ammo) {
+      const o = ap.get(); o.position.set(c.x, elevAt(m, c.x, c.y), c.y);
+      o.children.forEach((b, i) => { b.visible = i < c.charges; });
+      continue;
+    }
     if (c.depot) continue;
     const o = kp.get(); o.position.set(c.x, elevAt(m, c.x, c.y), c.y);
     o.children.forEach((b, i) => { b.visible = i < Math.min(6, c.charges); });
   }
-  kp.done();
+  kp.done(); ap.done();
   // air strikes: a red zone on the ground and the bomber passing over
   const sp = pool('strike', () => {
     const g = new THREE.Group();
@@ -647,7 +666,10 @@ function updateParticles3() {
   for (const p of G.particles) {
     const f = p.life / p.max, e = p.z === undefined ? elevAt(m, clamp(p.x, 0, W - 1), clamp(p.y, 0, H - 1)) : 0;
     switch (p.type) {
-      case 'flash': pushP(A, p.x, p.y, p.z ?? e + 27, 22, 1, 0.8, 0.4, f); break;
+      case 'flash':
+        if (p.big) { pushP(A, p.x, p.y, p.z ?? e + 27, 75, 1, 0.95, 0.75, f); pushP(A, p.x, p.y, p.z ?? e + 27, 30, 1, 1, 1, f); }
+        else pushP(A, p.x, p.y, p.z ?? e + 27, 22, 1, 0.8, 0.4, f);
+        break;
       case 'spark': pushP(A, p.x, p.y, p.z ?? e + 20, 4, 1, 0.85, 0.45, f); break;
       case 'fire': pushP(A, p.x, p.y, e + 8 + (1 - f) * 55 + p.size, p.size * 2.4, 1, 0.55 + f * 0.3, 0.15, f * 0.9); break;
       case 'blood': pushP(N, p.x, p.y, p.z ?? e + 22 - (1 - f) * 14, p.size * 3, 0.5, 0.03, 0.03, f * 0.9); break;
@@ -815,8 +837,10 @@ function render3d(dt) {
     o.g.rotation.y = -s.angle;
     const moving = Math.hypot(s.vx || 0, s.vy || 0) > 15 || (o.lx !== undefined && Math.hypot(s.x - o.lx, s.y - o.ly) > 0.6);
     o.lx = s.x; o.ly = s.y;
-    const sw = moving ? Math.sin(s.walkPhase) * 0.6 : 0;
-    u.legL.rotation.z = sw; u.legR.rotation.z = -sw;
+    const sw = moving && !(s.para > 0) ? Math.sin(s.walkPhase) * 0.6 : 0;
+    if (s.crouch) { u.body.position.y = -10; u.legL.rotation.z = 1.35; u.legR.rotation.z = -0.25; }   // kneeling
+    else { u.body.position.y = 0; u.legL.rotation.z = sw; u.legR.rotation.z = -sw; }
+    u.chute.visible = s.para > 0;
     u.arms.rotation.z = (s.pitch || 0) + (s.reloading ? -0.6 : 0);
     // teammates: a marker above the head (seen through walls) with their name when close
     if (s.team === P.team && s !== P) {

@@ -22,12 +22,12 @@ const CFG = {
   CAP_RATE: 4,                // % per second per soldier (max 3 counted): 25 s alone from neutral
   WIN_HOLD: 15,               // seconds a team must keep all five points to win
   SUPPLY_INTERVAL: 60,        // a truck every minute: ammo, health and reinforcements
-  TRUCK_SPEED: 170,
+  TRUCK_SPEED: 306,          // 1.8x the original 170
   CACHE_CHARGES: 6,
   FIELD_CACHE: 4,             // resupplies the cart leaves at the point it reaches
   CART_HP: 350,               // transport cart: carries reinforcements from the depot to the front
   CART_R: 28,
-  CART_SPEED: 160,
+  CART_SPEED: 288,           // 1.8x the original 160
   CACHE_MAX: 12,
   GRENADE_CHANCE: 0.5,        // half the soldiers spawn with a grenade
   GRENADE_RANGE: 380,         // max throw distance
@@ -72,6 +72,15 @@ const CFG = {
   ADS_ACC: 1.5,               // aiming down the sights divides spread by this
   ADS_SPEED: 0.6,             // movement speed while aiming down the sights
   ADS_ZOOM: 1.35,             // camera zoom while aiming down the sights
+  STEADY_T: 2,                // seconds without shooting or moving before the next shot is dead accurate again
+  CROUCH_ACC: 1.2,            // crouching (Ctrl) divides spread by this; you cannot move while crouched
+  CROUCH_EYE: 19, CROUCH_BODY: 25, CROUCH_HEAD: 18,
+  CAP_AMMO: 2,                // an ammo crate for this many soldiers appears on a point when it is captured
+  STREAK_T: 8,                // kills within this many seconds of each other chain into multi-kills
+  PARA_INTERVAL: 30,          // bridge down: every 30 s up to PARA_N dead soldiers parachute over a held point
+  PARA_N: 2,
+  PARA_H: 400,                // drop height (20 m)
+  PARA_FALL: 75,              // descent speed (px/s)
 };
 // Obstacle heights above the ground they stand on (px). Windows leave a gap you can see and shoot through.
 const OBST_H = {
@@ -94,12 +103,12 @@ const CLASSES = {
   },
   sniper: {
     name: 'Sniper', mag: 5, mags: 3, rate: 0.9, reload: 3.0, reloadEmpty: 3.4, dmg: 75,
-    bulletSpeed: 2600, range: 2600, spread: 0.01, spreadMove: 0.1, speed: 0.95, vision: 1500, auto: false,
+    bulletSpeed: 2600, range: 2600, spread: 0.01, spreadMove: 0.1, speed: 0.95, vision: 1300, auto: false,
     scopeRange: 2400, scopeCone: 0.32, scopeSpread: 0.35,
   },
   smg: {
     name: 'SMG', mag: 30, mags: 2, rate: 14, reload: 1.8, reloadEmpty: 2.2, dmg: 11,
-    bulletSpeed: 1400, range: 700, spread: 0.06, spreadMove: 0.08, speed: 1.1, vision: 1200, auto: true,
+    bulletSpeed: 1400, range: 700, spread: 0.06, spreadMove: 0.08, speed: 1.1, vision: 1300, auto: true,
   },
   lmg: {
     name: 'Machine gun', mag: 60, mags: 1, rate: 9, reload: 4.5, reloadEmpty: 5, dmg: 16,
