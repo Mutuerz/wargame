@@ -256,7 +256,7 @@ const NET = {
     else if (k === 'cap') { G.stats.captures[e[1]]++; SFX.capture(e[1] === P.team); }
     else if (k === 'm') { message(e[1], e[2], e[3]); if (e[4]) SFX.pickup(); }
     else if (k === 'f') feed(e[1], e[2]);
-    else if (k === 'ks') announceKill(e[1]);
+    else if (k === 'ks') announceKill(e[1], !!e[2]);
   },
 
   onOver(m) {

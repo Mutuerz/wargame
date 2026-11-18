@@ -21,6 +21,7 @@ const SFX = {
       this.loadClip('sgShot', 'sfx/shotgun-shot.mp3');
       this.loadClip('sgPump', 'sfx/shotgun-pump.mp3');
       this.loadClip('snShot', 'sfx/sniper-shot.mp3');
+      this.loadClip('hsClip', 'sfx/headshot.mp3');
     } catch (e) { this.ctx = null; }
   },
   toggle() { this.on = !this.on; if (this.master) this.master.gain.value = this.on ? 0.45 : 0; return this.on; },
@@ -128,7 +129,7 @@ function announcerVoice() {
   VOICE.pick = vs.find(v => /male|daniel|david|guy|fred|alex|george|arthur|james/i.test(v.name) && !/female/i.test(v.name)) || vs[0];
   return VOICE.pick;
 }
-function announceKill(n) {
+function announceKill(n, head) {
   n = clamp(n | 0, 1, 5);
   const [key, text, said] = KILL_LINES[n];
   if (G) G.killFx = { n, text, t: n > 1 ? 2.2 : 1.4, max: n > 1 ? 2.2 : 1.4 };
@@ -137,7 +138,15 @@ function announceKill(n) {
   SFX.tone(0.35, 150, 50, 0.35 + n * 0.08, 'sawtooth');
   SFX.burst(0.25, 900, 0.8, 0.25);
   if (n > 1) setTimeout(() => SFX.ok() && SFX.tone(0.16, 440 + n * 110, 880 + n * 220, 0.25 + n * 0.05, 'triangle'), 90);
+  // a headshot kill plays the headshot clip; a multi-kill voice then waits until it is done
+  const hs = head && SFX.hsClip;
+  if (hs) SFX.clip(SFX.hsClip, 1);
   if (n === 1) return;   // a single kill gets the sting only; the voice is for multi-kills
+  if (hs) { setTimeout(() => SFX.ok() && announceVoice(n), 1100); return; }
+  announceVoice(n);
+}
+function announceVoice(n) {
+  const [key, , said] = KILL_LINES[n];
   const f = VOICE.files[key];
   if (f) { try { f.currentTime = 0; f.volume = 0.9; f.play(); } catch (e) { } return; }
   if (!window.speechSynthesis) return;

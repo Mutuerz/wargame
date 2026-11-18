@@ -113,7 +113,7 @@ function spawnSoldier(s, choice) {
 }
 
 // Kill feedback (enemy down, double kill ... pentakill). The online server routes it to the killer's client.
-function killStreak(s, n) { if (s === G.player && typeof announceKill === 'function') announceKill(n); }
+function killStreak(s, n, head) { if (s === G.player && typeof announceKill === 'function') announceKill(n, head); }
 function message(text, color = '#e3e7df', t = 3.5) { G.msg = { text, color, t, max: t }; }
 function feed(text, color) { G.feed.unshift({ text, color, t: 7 }); if (G.feed.length > 6) G.feed.pop(); }
 // Messages meant for one team or one soldier. Offline they show only when they concern the local player;
@@ -256,10 +256,10 @@ function damage(target, amount, attacker, head) {
   else SFX.hitNear && SFX.hitNear(target.x, target.y);
   if (Math.random() < 0.6) stampBlood(G.art, target.x + rand(-10, 10), target.y + rand(-10, 10), rand(3, 7));
   for (let i = 0; i < 4; i++) G.particles.push({ type: 'blood', x: target.x, y: target.y, vx: rand(-80, 80), vy: rand(-80, 80), life: 0.4, max: 0.4, size: rand(1.5, 3) });
-  if (target.hp <= 0) kill(target, attacker);
+  if (target.hp <= 0) kill(target, attacker, head);
 }
 
-function kill(s, killer) {
+function kill(s, killer, head) {
   s.alive = false; s.hp = 0; s.deaths++; s.diedAt = G.time;
   // which way the body falls: away from whoever shot it
   s.fallA = killer && killer !== s ? Math.atan2(s.y - killer.y, s.x - killer.x) : s.angle + Math.PI;
@@ -270,7 +270,7 @@ function kill(s, killer) {
     if (killer.team !== s.team) {
       killer.streak = G.time - killer.lastKillT <= CFG.STREAK_T ? Math.min(5, killer.streak + 1) : 1;
       killer.lastKillT = G.time;
-      killStreak(killer, killer.streak);
+      killStreak(killer, killer.streak, !!head);
     }
   }
   const kn = killer ? killer.name : 'Explosion';
