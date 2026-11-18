@@ -354,9 +354,10 @@ let deadDock = false;
 function updateRespawnDock() {
   const P = G && G.player;
   if (!G || G.over || P.alive || G.auto) { $('respawn').hidden = true; deadDock = false; cv.classList.remove('dead'); return; }
-  $('respawn').hidden = false;
   // Just died: free the mouse so the weapon buttons can be clicked (no pause menu for this release).
   if (!deadDock) { deadDock = true; unlockPointer(); cv.classList.add('dead'); }
+  if (typeof KC !== 'undefined' && KC.on) { $('respawn').hidden = true; return; }   // out of the way during the kill cam
+  $('respawn').hidden = false;
   const t = P.team, tm = G.teams[t];
   let msg;
   const spec = spectateTarget();
@@ -469,7 +470,7 @@ function frame(now) {
     if (P.alive && !G.wasAlive) { look.yaw = P.angle; look.pitch = 0; }
     G.wasAlive = P.alive;
   }
-  if (G && !G.paused) recoilFrame(dt);
+  if (G && !G.paused) { recoilFrame(dt); kcRecord(dt); kcUpdate(dt); }
   finalCountdown();
   try { render(dt); } catch (e) { console.error(e); }
   if (G) updateRespawnDock();

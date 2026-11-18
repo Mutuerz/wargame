@@ -61,6 +61,8 @@ const CFG = {
   // ---- 3D (world units are the same pixels as the map; about 20 px = 1 m)
   LEVEL_H: 60,                // height of one terrain level
   EYE: 30,                    // eye height above the floor
+  LOOT_FRAC: 0.25,            // a dead enemy's body gives 25% of a full ammo load (into spare magazines), once
+  LOOT_R: 34, LOOT_LIFE: 90,  // pickup radius and how long a body can be looted
   PX_PER_M: 20,               // world units per metre (a soldier is 36 tall, about 1.8 m): for kill distances
   BODY_H: 36,                 // soldier hitbox height
   HEAD_H: 28,                 // hits above this height are headshots

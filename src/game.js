@@ -52,7 +52,7 @@ function startMatch(m, art, counts, playerSpot, opts = {}) {
   G = {
     m, art, time: 0, state: 'play', paused: false, over: false, winner: -1,
     skill: SKILLS[opts.skill ?? 1], auto: !!opts.auto,
-    soldiers: [], bullets: [], particles: [], drops: [], caches: [], c4s: [], trucks: [], feed: [], msg: null,
+    soldiers: [], bullets: [], particles: [], drops: [], loot: [], caches: [], c4s: [], trucks: [], feed: [], msg: null,
     teams: [
       { points: 0, supplyT: CFG.SUPPLY_INTERVAL, paraT: CFG.PARA_INTERVAL, sapperT: 100 + Math.random() * 40, counts: counts.slice(), vis: new Uint8Array(GW * GH) },
       { points: 0, supplyT: CFG.SUPPLY_INTERVAL, paraT: CFG.PARA_INTERVAL, sapperT: 100 + Math.random() * 40, counts: botCommanderCounts(), vis: new Uint8Array(GW * GH) },
@@ -273,6 +273,7 @@ function kill(s, killer, head) {
   s.fallA = killer && killer !== s ? Math.atan2(s.y - killer.y, s.x - killer.x) : s.angle + Math.PI;
   s.reloading = false; s.act = null; s.scoped = false;
   stampBody(G.art, s);
+  if (!s.riding) G.loot.push({ x: s.x, y: s.y, team: s.team, t: CFG.LOOT_LIFE });
   if (killer && killer !== s) {
     killer.kills++;
     if (killer.team !== s.team) {
@@ -470,6 +471,7 @@ function update(dt) {
   updateCapture(dt);
   updateSupply(dt);
   updateGrenades(dt);
+  updateLoot(dt);
   updateCarts(dt);
   updateStrikes(dt);
   G.cmdT = (G.cmdT || 0) - dt;
@@ -716,6 +718,29 @@ function updateParachutes(t, dt) {
   feedFor(t, `${dead.length} soldier${dead.length > 1 ? 's' : ''} parachuting in`, TEAMS[t].color);
 }
 
+// Looting: walk over a dead enemy and take 25% of a full load for the weapon in your hands. The rounds go into your
+// spare magazines (topping up partial ones first), so you still reload to use them. Each body gives once, and only
+// if you had room for at least a few rounds.
+function updateLoot(dt) {
+  for (let i = G.loot.length - 1; i >= 0; i--) {
+    const l = G.loot[i];
+    if ((l.t -= dt) <= 0) { G.loot.splice(i, 1); continue; }
+    for (const s of G.soldiers) {
+      if (!s.alive || s.team === l.team || s.riding || dist2(s.x, s.y, l.x, l.y) > CFG.LOOT_R * CFG.LOOT_R) continue;
+      const c = s.cls, cap = c.mag * c.mags, have = s.mags.reduce((a, b) => a + b, 0);
+      let give = Math.min(Math.round(CFG.LOOT_FRAC * c.mag * (c.mags + 1)), cap - have);
+      if (give < Math.max(2, c.mag * 0.1)) continue;
+      const got = give;
+      s.mags.sort((a, b) => b - a);
+      for (let k = 0; k < s.mags.length && give > 0; k++) { const add = Math.min(give, c.mag - s.mags[k]); s.mags[k] += add; give -= add; }
+      while (give > 0) { const add = Math.min(give, c.mag); s.mags.push(add); give -= add; }
+      msgTo(s, `Ammo from the body: +${got} rounds (reload to use them)`, '#7fd18b', 2);
+      if (s.isPlayer) SFX.pickup();
+      G.loot.splice(i, 1);
+      break;
+    }
+  }
+}
 function updateDrops(dt) {
   G.dropT -= dt;
   if (G.dropT <= 0) { G.dropT = CFG.DROP_INTERVAL; if (G.drops.length < CFG.DROP_MAX) spawnDrop(false); }

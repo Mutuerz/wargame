@@ -893,6 +893,7 @@ function updateWeather(dt, cx, cz) {
 function soldierShown(s, P) { return s.alive && s.x > -9000; }
 // Where the camera is: your eyes, or a chase view of a teammate / your cart while you wait to respawn.
 function cameraView(P) {
+  const kc = kcCamera(); if (kc) return kc;   // kill cam replay (killcam.js)
   const m = G.m;
   // your own death: the view drops to the ground and rolls over before the spectator camera takes over
   if (!P.alive && R3.wasAlive && R3.lastCam && R3.lastCam.fp) R3.death = { x: R3.lastCam.x, y: R3.lastCam.y, z: R3.lastCam.z, yaw: R3.lastCam.yaw, pitch: R3.lastCam.pitch, t: 0, side: Math.random() < 0.5 ? 1 : -1 };

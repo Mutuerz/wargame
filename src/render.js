@@ -43,11 +43,13 @@ function render(dt) {
     txt('This browser could not start WebGL, which the 3D view needs.', VW / 2, VH / 2, '600 18px "Chakra Petch", sans-serif', '#ff8a6e', 'center');
     return;
   }
-  render3d(dt);
+  kcBegin();   // kill cam: pose the world as recorded for this frame only
+  try { render3d(dt); } finally { kcEnd(); }
   const B = BIOMES[G.m.biome], P = G.player;
   ctx.fillStyle = B.tint; ctx.fillRect(0, 0, VW, VH);
   if (P.scoped && R3.zoom > 1.5) drawScope();
   else ctx.drawImage(vignette, 0, 0, VW, VH);
+  if (KC.on) { kcOverlay(); return; }
   if (G.hurtT > 0) {
     ctx.globalAlpha = G.hurtT * 1.4;
     const g = ctx.createRadialGradient(VW / 2, VH / 2, Math.min(VW, VH) * 0.3, VW / 2, VH / 2, Math.max(VW, VH) * 0.7);
