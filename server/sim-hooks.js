@@ -162,8 +162,7 @@ const SIM = {
   teamView(T) {
     const sol = [];
     for (const s of G.soldiers) {
-      if (!s.alive) continue;
-      if (s.team !== T && !(soldierVisible(T, s) || G.time - s.spotted[T] < 1.6)) continue;
+      if (!s.alive) continue;   // everyone is sent: the 3D view has no fog of war (flag 32 = spotted, for the maps)
       let f = 0;
       if (s.reloading) f |= 1; if (s.scoped) f |= 2; if (s.shield > 0) f |= 4;
       if (s.c4 > 0 && s.bot && s.bot.role === 'sapper') f |= 8; if (s.act) f |= 16;

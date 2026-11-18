@@ -748,19 +748,33 @@ function computeVision(team) {
     const r = Math.ceil(CFG.VISION_NEAR / CELL), ci = (s.x / CELL) | 0, cj = (s.y / CELL) | 0;
     for (let j = cj - r; j <= cj + r; j++) for (let i = ci - r; i <= ci + r; i++) if (i >= 0 && j >= 0 && i < GW && j < GH && (i - ci) ** 2 + (j - cj) ** 2 <= r * r) { vis[j * GW + i] = 1; if (s.z > 0) visHi[j * GW + i] = 1; }
   }
-  for (const e of G.soldiers) if (e.alive && e.team !== team && soldierVisible(team, e)) e.spotted[team] = G.time;
+  // Enemy soldiers: a direct 3D line from some teammate's eyes to their head or chest (the grid above is only
+  // for the map fog; it is too coarse for people, who vanished behind cover they were peeking over).
+  for (const e of G.soldiers) {
+    if (!e.alive || e.team === team) continue;
+    if (!e.seenT) e.seenT = [-99, -99];
+    if (seesSoldier(team, e)) { e.seenT[team] = G.time; e.spotted[team] = G.time; }
+  }
+}
+function seesSoldier(team, e) {
+  const m = G.m, hz = feetZ(e) + bodyH(e) - 4, cz = chestZ(e);
+  for (const a of G.soldiers) {
+    if (!a.alive || a.team !== team) continue;
+    const d = dist(a.x, a.y, e.x, e.y);
+    if (d <= CFG.VISION_NEAR) return true;
+    const scope = a.scoped && d <= a.cls.scopeRange && Math.abs(angDiff(a.angle, Math.atan2(e.y - a.y, e.x - a.x))) <= a.cls.scopeCone;
+    if (d > visionRange(a) && !scope) continue;
+    const ez = eyeZ(a);
+    if (los3(m, a.x, a.y, ez, e.x, e.y, hz) || los3(m, a.x, a.y, ez, e.x, e.y, cz) || los3(m, a.x, a.y, ez, e.x, e.y, feetZ(e) + 8)) return true;
+  }
+  return false;
 }
 function isVisible(team, x, y) {
   if (x < 0 || y < 0 || x >= W || y >= H) return false;
   return G.teams[team].vis[((y / CELL) | 0) * GW + ((x / CELL) | 0)] === 1;
 }
-// Soldiers on an upper floor are seen through the windows (the visHi grid).
-function soldierVisible(team, s) {
-  if (!(s.z >= CFG.FLOOR_H / 2)) return isVisible(team, s.x, s.y);
-  const v = G.teams[team].visHi;
-  if (!v || s.x < 0 || s.y < 0 || s.x >= W || s.y >= H) return false;
-  return v[((s.y / CELL) | 0) * GW + ((s.x / CELL) | 0)] === 1;
-}
+// Seen by the team at its last vision update (computeVision runs every 0.15 s).
+function soldierVisible(team, s) { return !!s.seenT && G.time - s.seenT[team] <= 0.32; }
 
 // Grenades and C4 knock down house walls and windows inside the blast.
 function breakWalls(x, y, r, z) {

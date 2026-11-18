@@ -336,8 +336,7 @@ const NET = {
       if (s === P) continue;
       const nb = B.solMap.get(s.id);
       if (!nb) {
-        if (s.team === myT) s.alive = false;
-        else { s.alive = s.rAlive; s.x = s.y = -9999; }
+        s.alive = false; s.x = s.y = -9999;   // every living soldier is in each snapshot
         continue;
       }
       const na = A.solMap.get(s.id) || nb;

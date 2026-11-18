@@ -814,11 +814,9 @@ function buildViewModel(clsKey) {
 }
 
 // ---------- per-frame
-function soldierShown(s, P) {
-  if (!s.alive || s.x < -9000) return false;
-  if (s.team === P.team) return true;
-  return soldierVisible(P.team, s) || G.time - s.spotted[P.team] < 1.6;
-}
+// No fog of war in the 3D view: every soldier is drawn and only walls, terrain and distance haze hide them.
+// (The minimap and the M map still show only enemies your team has spotted.)
+function soldierShown(s, P) { return s.alive && s.x > -9000; }
 // Where the camera is: your eyes, or a chase view of a teammate / your cart while you wait to respawn.
 function cameraView(P) {
   const m = G.m;
