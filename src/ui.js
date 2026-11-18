@@ -346,22 +346,13 @@ function updateRespawnDock() {
   if (!G || G.over || P.alive || G.auto) { $('respawn').hidden = true; return; }
   $('respawn').hidden = false;
   const t = P.team, tm = G.teams[t];
-  const truck = G.trucks.find(k => k.team === t && k.state === 'in');
   let msg;
   const spec = spectateTarget();
   const specTxt = spec && !P.riding ? ` Spectating ${spec.name}: click or Space to switch.` : '';
   if (P.riding) msg = `Riding the transport to sector ${P.riding.target.name} (${Math.ceil(P.riding.hp)} HP). Press E to jump out early.`;
-  else if (G.m.bridges[t].destroyed) {
-    const held = G.m.points.filter(p => p.owner === t).length;
-    msg = held ? `You were killed. Our bridge is down: the next parachute drop (${CFG.PARA_N} soldiers over a point we hold) is in ${Math.ceil(tm.paraT || 0)} s.`
-      : 'You were killed. Our bridge is down and we hold no point to parachute onto. Your team must take one back.';
-    msg += specTxt;
-  }
-  else if (truck) msg = 'You were killed. Your truck is crossing the bridge now.' + specTxt;
   else {
-    const lane = G.m.truckLanes[t];
-    const eta = tm.supplyT + Math.abs(lane.to - lane.from) / CFG.TRUCK_SPEED;
-    msg = `You were killed. You return with the next truck in ${eta.toFixed(0)} s.` + specTxt;
+    const held = G.m.points.filter(p => p.owner === t).length;
+    msg = `You were killed. Next parachute drop in ${Math.ceil(tm.paraT || 0)} s (up to ${CFG.PARA_N} soldiers, first killed first) ${held ? 'over a sector we hold' : 'over our base, since we hold no sector'}.` + specTxt;
   }
   $('respawnText').textContent = msg;
 }

@@ -17,7 +17,7 @@ const SFX = {
   beep(x, y) { emit('a', ['beep', r1(x), r1(y)]); },
   shot() {}, click() {}, reload() {}, pickup() {}, capture() {}, hit() {}, init() {}, toggle() { return true; },
 };
-function stampBody(art, s) { emit('a', ['body', r1(s.x), r1(s.y), r2(s.angle), s.team]); }
+function stampBody(art, s) { emit('a', ['body', r1(s.x), r1(s.y), r2(s.angle), s.team, r2(s.fallA ?? s.angle + Math.PI), r1(s.z || 0), r1(s.para || 0), s.cls.key]); }
 function stampScorch(art, x, y, r) { emit('a', ['scorch', r1(x), r1(y), r1(r)]); }
 function stampRubble(art, o) { if (o.sid !== undefined) { NET.gone.push(o.sid); emit('a', ['wall', o.sid]); } }
 function stampBlood() {}

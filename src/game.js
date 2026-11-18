@@ -189,7 +189,9 @@ function damage(target, amount, attacker, head) {
 }
 
 function kill(s, killer) {
-  s.alive = false; s.hp = 0; s.deaths++;
+  s.alive = false; s.hp = 0; s.deaths++; s.diedAt = G.time;
+  // which way the body falls: away from whoever shot it
+  s.fallA = killer && killer !== s ? Math.atan2(s.y - killer.y, s.x - killer.x) : s.angle + Math.PI;
   s.reloading = false; s.act = null; s.scoped = false;
   stampBody(G.art, s);
   if (killer && killer !== s) {
@@ -334,9 +336,8 @@ function destroyBridge(team, attacker) {
   G.teams[1 - team].points += CFG.SABOTAGE_REWARD;
   if (attacker) attacker.points += CFG.SABOTAGE_REWARD;
   feed(`${TEAMS[team].name}'s bridge destroyed`, TEAMS[1 - team].color);
-  G.teams[team].paraT = CFG.PARA_INTERVAL;
-  msgFor(team, `Our bridge is down. Reinforcements now parachute over our points, ${CFG.PARA_N} every ${CFG.PARA_INTERVAL} s`, '#ff5a4e', 5);
-  msgFor(1 - team, 'Enemy bridge destroyed. They can only parachute in over the points they hold', TEAMS[1 - team].color, 5);
+  msgFor(team, 'Our bridge is down. No more supply trucks or carts', '#ff5a4e', 5);
+  msgFor(1 - team, 'Enemy bridge destroyed. Their supplies are cut off', TEAMS[1 - team].color, 5);
 }
 
 // ---------------- Drops
@@ -412,10 +413,6 @@ function update(dt) {
     }
   }
   if (lockTeam >= 0) { G.lock.t += dt; if (G.lock.t >= CFG.WIN_HOLD) return endMatch(lockTeam, 'Held all five sectors at once'); }
-  for (let t = 0; t < 2; t++) {
-    if (m.bridges[t].destroyed && !G.trucks.some(k => k.team === t) && !G.carts.some(c => c.team === t) && !G.soldiers.some(s => s.team === t && s.alive) && !m.points.some(p => p.owner === t))
-      return endMatch(1 - t, `${TEAMS[t].name} was wiped out with no bridge and no sector to parachute into`);
-  }
   if (G.time >= CFG.TIME_LIMIT) {
     const h0 = m.points.filter(p => p.owner === 0).length, h1 = m.points.filter(p => p.owner === 1).length;
     if (h0 !== h1) return endMatch(h0 > h1 ? 0 : 1, 'Time limit: held more points');
@@ -550,14 +547,13 @@ function updateSupply(dt) {
   const m = G.m;
   for (let t = 0; t < 2; t++) {
     const tm = G.teams[t];
-    if (m.bridges[t].destroyed) { updateParachutes(t, dt); continue; }
+    updateParachutes(t, dt);
+    if (m.bridges[t].destroyed) continue;
     tm.supplyT -= dt;
     if (tm.supplyT <= 0) {
       tm.supplyT = CFG.SUPPLY_INTERVAL;
       const lane = m.truckLanes[t];
       G.trucks.push({ team: t, x: lane.from, y: lane.y, dir: lane.dir, state: 'in', t: 0 });
-      const dead = G.soldiers.filter(x => x.team === t && !x.alive).length;
-      if (dead) feedFor(t, `Truck crossing the bridge with ${dead} reinforcement${dead > 1 ? 's' : ''}`, TEAMS[t].color);
     }
   }
   for (const tr of G.trucks.slice()) {
@@ -570,9 +566,7 @@ function updateSupply(dt) {
         let c = G.caches.find(c => c.team === tr.team && c.depot);
         if (c) c.charges = Math.min(c.charges + CFG.CACHE_CHARGES, CFG.CACHE_MAX);
         else G.caches.push({ team: tr.team, x: d.x, y: d.y, charges: CFG.CACHE_CHARGES, depot: true });
-        // reinforcements board a transport cart to the front
-        const riders = G.soldiers.filter(so => so.team === tr.team && !so.alive && !so.riding);
-        launchCart(tr.team, riders);   // the cart always runs: it also carries supplies to the front
+        launchCart(tr.team, []);   // the cart carries supplies (no soldiers) to the front
       }
     } else if (tr.state === 'unload') {
       tr.t -= dt; if (tr.t <= 0) { tr.state = 'out'; tr.dir = -tr.dir; }
@@ -604,23 +598,25 @@ function updateSupply(dt) {
   G.caches = G.caches.filter(c => c.charges > 0);
 }
 
-// Bridge down: every PARA_INTERVAL s up to PARA_N dead soldiers parachute in 20 m above a point the team holds.
+// The only respawn: every PARA_INTERVAL s the first PARA_N soldiers to have died parachute in 20 m above
+// the flag of a sector the team holds (over the home base if it holds none).
 function updateParachutes(t, dt) {
   const tm = G.teams[t], m = G.m;
   tm.paraT -= dt;
   if (tm.paraT > 0) return;
   tm.paraT = CFG.PARA_INTERVAL;
+  const dead = G.soldiers.filter(s => s.team === t && !s.alive && !s.riding).sort((a, b) => (a.diedAt || 0) - (b.diedAt || 0)).slice(0, CFG.PARA_N);
+  if (!dead.length) return;
   const held = m.points.filter(p => p.owner === t);
-  const dead = G.soldiers.filter(s => s.team === t && !s.alive && !s.riding).slice(0, CFG.PARA_N);
-  if (!held.length || !dead.length) return;
+  const zones = held.length ? held : m.spawns[t].map(sp => ({ x: sp.x, y: sp.y, name: 'base' }));
   for (const s of dead) {
-    const p = pickRand(held);
+    const p = pickRand(zones);
     let f = null;
-    for (let k = 0; k < 20 && !f; k++) { const c = randomFreeNear(m, p.x + rand(-90, 90), p.y + rand(-90, 90), 110); if (!houseAt(m, c.x, c.y)) f = c; }
-    f = f || randomFreeNear(m, p.x, p.y, 140);
+    for (let k = 0; k < 20 && !f; k++) { const c = randomFreeNear(m, p.x + rand(-150, 150), p.y + rand(-150, 150), 110); if (!houseAt(m, c.x, c.y)) f = c; }
+    f = f || randomFreeNear(m, p.x, p.y, 160);
     spawnSoldier(s, { type: 'at', x: f.x, y: f.y });
     s.x = f.x; s.y = f.y; s.para = CFG.PARA_H; s.shield = CFG.SPAWN_SHIELD;
-    msgTo(s, `Parachuting into sector ${p.name}`, TEAMS[t].color, 3);
+    msgTo(s, p.name === 'base' ? 'Parachuting into our base (we hold no sector)' : `Parachuting into sector ${p.name}`, TEAMS[t].color, 3);
   }
   feedFor(t, `${dead.length} soldier${dead.length > 1 ? 's' : ''} parachuting in`, TEAMS[t].color);
 }

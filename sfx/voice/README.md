@@ -1,6 +1,6 @@
 # Announcer voice lines (optional)
 
-Drop MP3 files here to replace the browser's built-in speech voice for the multi-kill callouts:
+MP3 clips for the multi-kill callouts. Replace any of them with your own; a missing file falls back to the browser's speech voice. The current clips come from commercial games (Halo, League of Legends) and are copyrighted, so keep them for private play:
 
 | File | Line |
 | --- | --- |

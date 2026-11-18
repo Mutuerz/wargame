@@ -22,7 +22,7 @@ const CFG = {
   CAP_TIME: 30,               // seconds for one soldier to take a neutral sector (twice that from the enemy)
   CAP_LOG: 0.2,               // each doubling of the majority's edge adds this much speed: 2 -> 1.2x, 4 -> 1.4x, 8 -> 1.6x
   WIN_HOLD: 15,               // seconds a team must keep all five sectors to win
-  SUPPLY_INTERVAL: 60,        // a truck every minute: ammo, health and reinforcements
+  SUPPLY_INTERVAL: 60,        // a truck every minute: ammo and health (it no longer brings soldiers)
   TRUCK_SPEED: 306,          // 1.8x the original 170
   CACHE_CHARGES: 6,
   FIELD_CACHE: 4,             // resupplies the cart leaves at the point it reaches
@@ -78,8 +78,8 @@ const CFG = {
   CROUCH_EYE: 19, CROUCH_BODY: 25, CROUCH_HEAD: 18,
   CAP_AMMO: 2,                // an ammo crate for this many soldiers appears on a point when it is captured
   STREAK_T: 8,                // kills within this many seconds of each other chain into multi-kills
-  PARA_INTERVAL: 30,          // bridge down: every 30 s up to PARA_N dead soldiers parachute over a held point
-  PARA_N: 2,
+  PARA_INTERVAL: 30,          // the only respawn: every 30 s up to PARA_N dead soldiers parachute over a held sector
+  PARA_N: 5,
   PARA_H: 400,                // drop height (20 m)
   PARA_FALL: 75,              // descent speed (px/s)
 };

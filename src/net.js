@@ -223,10 +223,10 @@ const NET = {
       const [, tid, aid, x, y] = e;
       if (Math.random() < 0.6) stampBlood(G.art, x + rand(-10, 10), y + rand(-10, 10), rand(3, 7));
       for (let i = 0; i < 4; i++) G.particles.push({ type: 'blood', x, y, vx: rand(-80, 80), vy: rand(-80, 80), life: 0.4, max: 0.4, size: rand(1.5, 3) });
-      if (tid === P.id) G.hurtT = 0.45;
+      if (tid === P.id) { G.hurtT = 0.45; P.lastHitBy = G.soldiers.find(s => s.id === aid) || null; }
       if (aid === P.id && tid !== P.id) { G.hitT = 0.15; SFX.hit(); }
     } else if (k === 'body') {
-      stampBody(G.art, { x: e[1], y: e[2], angle: e[3], team: e[4] });
+      stampBody(G.art, { x: e[1], y: e[2], angle: e[3], team: e[4], fallA: e[5], z: e[6] || 0, para: e[7] || 0, cls: CLASSES[e[8]] || CLASSES.rifleman });
     } else if (k === 'boom') {
       netExplosionFx(e[1], e[2]);
     } else if (k === 'scorch') {

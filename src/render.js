@@ -60,6 +60,17 @@ function render(dt) {
       ctx.beginPath(); ctx.arc(VW / 2, VH / 2, r, rel - Math.PI / 2 - 0.35, rel - Math.PI / 2 + 0.35); ctx.stroke(); ctx.globalAlpha = 1;
     }
   }
+  if (!P.alive && R3.death && R3.lastCam && R3.lastCam.dead) {
+    const t = R3.death.t, a = Math.min(1, t * 1.5) * (t > 1.7 ? Math.max(0, (2.2 - t) / 0.5) : 1);
+    const g = ctx.createRadialGradient(VW / 2, VH / 2, Math.min(VW, VH) * 0.15, VW / 2, VH / 2, Math.max(VW, VH) * 0.7);
+    g.addColorStop(0, `rgba(60,0,0,${0.25 * a})`); g.addColorStop(1, `rgba(20,0,0,${0.85 * a})`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, VW, VH);
+    ctx.globalAlpha = a;
+    txt('YOU WERE KILLED', VW / 2, VH * 0.42, '800 34px "Chakra Petch", sans-serif', '#ff5a4e', 'center', 'middle');
+    const k = P.lastHitBy;
+    if (k && k.team !== P.team) txt(`by ${k.name}${k.cls ? ' · ' + k.cls.name : ''}`, VW / 2, VH * 0.42 + 34, '500 16px "IBM Plex Mono", monospace', '#e3e7df', 'center', 'middle');
+    ctx.globalAlpha = 1;
+  }
   drawHUD();
 }
 function drawScope() {
@@ -127,7 +138,7 @@ function drawHUD() {
     txt(fmtTime(G.time), 24, 40, `700 22px ${D}`, '#fff');
     txt(`limit ${fmtTime(CFG.TIME_LIMIT)}`, 230, 40, `400 11px ${M}`, '#8e9b92', 'right');
     const myBridge = m.bridges[P.team];
-    const sup = myBridge.destroyed ? `Bridge down · parachutes in ${Math.ceil(G.teams[P.team].paraT || 0)} s` : `Supply truck in ${fmtTime(G.teams[P.team].supplyT)}`;
+    const sup = `Parachutes in ${Math.ceil(G.teams[P.team].paraT || 0)} s` + (myBridge.destroyed ? ' · no trucks' : ` · truck ${fmtTime(G.teams[P.team].supplyT)}`);
     txt(sup, 24, 64, `500 13px ${M}`, myBridge.destroyed ? '#ff5a4e' : '#e3e7df');
     const eb = m.bridges[1 - P.team];
     txt(eb.destroyed ? 'Enemy bridge: destroyed' : 'Enemy bridge: standing', 24, 86, `400 12px ${M}`, eb.destroyed ? '#7fd18b' : '#8e9b92');

@@ -412,7 +412,7 @@ function addDecal(x, y, r, color, alpha) {
 const _stampBlood = stampBlood, _stampScorch = stampScorch, _stampBody = stampBody, _stampRubble = stampRubble;
 stampBlood = function (art, x, y, r) { if (art) _stampBlood(art, x, y, r); addDecal(x, y, r * 1.8, '#5a0b0b'); };
 stampScorch = function (art, x, y, r) { if (art) _stampScorch(art, x, y, r); addDecal(x, y, r, '#1c1a16'); };
-stampBody = function (art, s) { if (art) _stampBody(art, s); addBody(s.x, s.y, s.angle, s.team, s.z || 0); addDecal(s.x - Math.cos(s.angle) * 8, s.y - Math.sin(s.angle) * 8, 16, '#4a0909'); };
+stampBody = function (art, s) { if (art) _stampBody(art, s); addBody(s.x, s.y, s.angle, s.team, s.z || 0, s.fallA, s.cls && s.cls.key, s.para || 0); addDecal(s.x - Math.cos(s.angle) * 8, s.y - Math.sin(s.angle) * 8, 16, '#4a0909'); };
 stampRubble = function (art, o) { if (art) _stampRubble(art, o); r3RemoveSolid(o); };
 stampCasing = function () {};
 
@@ -480,15 +480,57 @@ function soldierObj(s) {
   }
   return o;
 }
-function addBody(x, y, angle, team, z) {
+// Deaths are animated: the soldier is knocked back away from the shot and falls in one of three ways
+// (backward, crumpling forward onto the knees, or twisting sideways), then settles with a small bounce.
+// z is the floor the body comes to rest on; air is how high above it the soldier died (parachuting).
+function addBody(x, y, angle, team, z, fallA, cls, air) {
   if (!R3.map) return;
-  const g = makeSoldierModel(team, 'rifleman');
-  g.userData.body.rotation.z = Math.PI / 2 - 0.08; g.userData.body.position.y = 4;
-  g.userData.legL.rotation.z = 0.3; g.userData.arms.rotation.z = -0.9;
-  g.position.set(x, elevAt(R3.map, x, y) + z, y); g.rotation.y = -angle;
+  if (fallA === undefined || fallA === null) fallA = angle + Math.PI;
+  const g = makeSoldierModel(team, cls || 'rifleman');
+  const r = Math.random(), kind = r < 0.5 ? 'back' : r < 0.8 ? 'fwd' : 'side';
+  const heading = kind === 'back' ? fallA + Math.PI : kind === 'fwd' ? fallA : fallA + Math.PI / 2 * (Math.random() < 0.5 ? 1 : -1);
+  g.rotation.y = -heading;
+  const ground = elevAt(R3.map, x, y) + (z || 0);
+  g.position.set(x, ground + (air || 0), y);
   scene3.add(g);
-  R3.bodies.push({ g, t: 0 });
+  const knock = kind === 'back' ? rand(14, 26) : kind === 'fwd' ? rand(4, 10) : rand(8, 16);
+  R3.bodies.push({ g, t: 0, kind, x, y, ground, air: air || 0, kx: Math.cos(fallA) * knock, ky: Math.sin(fallA) * knock,
+    dur: kind === 'fwd' ? 0.95 : 0.7, side: Math.random() < 0.5 ? 1 : -1, armA: rand(-1.4, -0.6) });
   if (R3.bodies.length > 26) { const b = R3.bodies.shift(); scene3.remove(b.g); }
+}
+function animateBody(b, dt) {
+  b.t += dt;
+  const u = b.g.userData, T = b.t, p = clamp(T / b.dur, 0, 1);
+  const easeOut = 1 - (1 - Math.min(1, T / 0.45)) ** 3;   // knockback slide
+  const settle = p < 1 ? 0 : Math.exp(-(T - b.dur) * 9) * Math.sin((T - b.dur) * 28) * 0.07;   // small bounce on impact
+  let fall = 0;
+  if (b.air > 0) fall = Math.max(0, b.air - 0.5 * 900 * T * T);
+  b.g.position.set(b.x + b.kx * easeOut, b.ground + fall, b.y + b.ky * easeOut);
+  const LIE = Math.PI / 2 - 0.08;
+  if (b.kind === 'back') {
+    // stagger, knees give, then tip over backward with the arms flung up
+    const tip = p * p * (3 - 2 * p) * (p < 0.15 ? 0.3 : 1);
+    u.body.rotation.z = LIE * tip + settle;
+    u.body.position.y = 4 * tip - Math.sin(p * Math.PI) * 4;
+    u.legL.rotation.z = -0.5 * Math.sin(p * Math.PI) + 0.3 * p; u.legR.rotation.z = 0.25 * p;
+    u.arms.rotation.z = b.armA * Math.min(1, p * 1.6);
+  } else if (b.kind === 'fwd') {
+    // drop to the knees first, then fall face down
+    const knee = Math.min(1, p / 0.4), tip = clamp((p - 0.35) / 0.65, 0, 1);
+    const tipE = tip * tip;
+    u.legL.rotation.z = 1.3 * knee * (1 - tipE * 0.8); u.legR.rotation.z = 1.2 * knee * (1 - tipE * 0.8);
+    u.body.position.y = -10 * knee * (1 - tipE) + 4 * tipE;
+    u.body.rotation.z = -LIE * tipE - settle;
+    u.arms.rotation.z = -0.4 * knee + 0.9 * tipE;
+  } else {
+    // twist and fall onto the side
+    const tip = p * p;
+    u.body.rotation.y = 0.9 * b.side * Math.min(1, p * 2);
+    u.body.rotation.x = LIE * tip * b.side + settle * b.side;
+    u.body.position.y = 3 * tip;
+    u.legL.rotation.z = 0.5 * p; u.legR.rotation.z = -0.3 * p;
+    u.arms.rotation.z = -0.8 * p;
+  }
 }
 
 // ---------- dynamic objects (trucks, carts, grenades, C4, drops, caches, strikes, bombers)
@@ -614,8 +656,8 @@ function updateDynamic(dt) {
     const contested = pt.c0 > 0 && pt.c1 > 0;
     relabel(o.label, pt.name, contested && Math.sin(G.time * 10) > 0 ? '#ffffff' : pt.owner >= 0 ? TEAMS[pt.owner].color : '#e6ad45');
   });
-  // bodies fade out after a while
-  for (const b of R3.bodies) b.t += dt;
+  // dying soldiers fall, then lie still
+  for (const b of R3.bodies) if (b.t < 2.5) animateBody(b, dt); else b.t += dt;
 }
 
 // ---------- bullets (tracers) and particles
@@ -780,6 +822,16 @@ function soldierShown(s, P) {
 // Where the camera is: your eyes, or a chase view of a teammate / your cart while you wait to respawn.
 function cameraView(P) {
   const m = G.m;
+  // your own death: the view drops to the ground and rolls over before the spectator camera takes over
+  if (!P.alive && R3.wasAlive && R3.lastCam && R3.lastCam.fp) R3.death = { x: R3.lastCam.x, y: R3.lastCam.y, z: R3.lastCam.z, yaw: R3.lastCam.yaw, pitch: R3.lastCam.pitch, t: 0, side: Math.random() < 0.5 ? 1 : -1 };
+  R3.wasAlive = P.alive;
+  if (!P.alive && R3.death && !P.riding) {
+    const d = R3.death, t = d.t;
+    if (t < 2.2) {
+      const p = Math.min(1, t / 0.7), e = p * p, z = lerp(d.z, d.z - CFG.EYE + 8, e);
+      return { fp: true, dead: true, x: d.x, y: d.y, z, yaw: d.yaw + d.side * 0.25 * e, pitch: lerp(d.pitch, 0.35, e), roll: d.side * 1.25 * e };
+    }
+  } else if (P.alive) R3.death = null;
   if (P.alive) {
     const auto = G.auto;
     const yaw = auto ? P.angle : R3.look.yaw, pitch = auto ? P.pitch : R3.look.pitch;
@@ -814,18 +866,22 @@ function render3d(dt) {
   const m = G.m, P = G.player;
   if (R3.map !== m) { r3Build(m, G.art); R3.look.yaw = P.angle; R3.look.pitch = 0; }
   // camera
+  if (R3.death) R3.death.t += Math.min(dt, 0.05);
   const v = cameraView(P);
   R3.lastCam = v;
+  // hide your own body while the death camera lies where it fell
+  for (const b of R3.bodies) b.g.visible = !(v.dead && Math.hypot(b.x - v.x, b.y - v.y) < 40);
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const sh = reduce ? 0 : G.cam.shake * 0.4;
   R3.kick = Math.max(0, R3.kick - dt * 6);
   cam3.position.set(v.x + rand(-sh, sh), v.z + rand(-sh, sh) * 0.5, v.y + rand(-sh, sh));
   cam3.rotation.set(v.pitch + R3.kick * 0.04, -v.yaw - Math.PI / 2, 0);
+  if (v.roll) cam3.rotateZ(v.roll);
   G.cam.x = v.x; G.cam.y = v.y;
   SFX.listener.x = v.x; SFX.listener.y = v.y;
   R3.camElev = v.z;
   // scope zoom
-  const zoomT = v.fp && P.scoped ? CFG.SCOPE_ZOOM : v.fp && P.ads ? CFG.ADS_ZOOM : 1;
+  const zoomT = v.dead ? 1 : v.fp && P.scoped ? CFG.SCOPE_ZOOM : v.fp && P.ads ? CFG.ADS_ZOOM : 1;
   R3.zoom = lerp(R3.zoom, zoomT, 1 - Math.exp(-dt * 14));
   if (Math.abs(R3.zoom - zoomT) < 0.02) R3.zoom = zoomT;
   const fov = 2 * Math.atan(Math.tan(CFG.FOV * Math.PI / 360) / R3.zoom) * 180 / Math.PI;
@@ -870,7 +926,7 @@ function render3d(dt) {
   gl3.render(scene3, cam3);
 
   // own weapon
-  if (v.fp && !G.auto && !(P.scoped && R3.zoom > 1.5)) {
+  if (v.fp && !v.dead && !G.auto && !(P.scoped && R3.zoom > 1.5)) {
     if (!R3.vm || R3.vmCls !== P.cls.key || R3.vmTeam !== P.team) buildViewModel(P.cls.key);
     const vm = R3.vm;
     if (P.mag < R3.lastMag && !P.reloading) { R3.kick = Math.min(1.2, R3.kick + (P.cls.key === 'sniper' ? 1.2 : 0.45)); R3.lastShotT = G.time; }
