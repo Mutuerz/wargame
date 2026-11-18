@@ -19,7 +19,19 @@ function makeSoldier(team, idx, isPlayer) {
 function maxHp(s) { return CFG.HP * s.mods.maxHp; }
 function ammoTotal(s) { return s.mag + s.mags.reduce((a, b) => a + b, 0); }
 function ammoFull(s) { return s.cls.mag * (s.cls.mags + 1); }
-function refillAmmo(s) { s.mag = s.cls.mag; s.mags = Array(s.cls.mags).fill(s.cls.mag); s.reloading = false; }
+function refillAmmo(s) { s.mag = s.cls.mag; s.mags = Array(s.cls.mags).fill(s.cls.mag); s.reloading = false; s.stash = {}; }
+// 1 = main weapon, 2 = sidearm. Each keeps its own ammo; an empty stash means full magazines.
+function switchWeapon(s, slot) {
+  if (!s.alive || s.riding || (s.slot || 0) === slot || !s.prim || s.vault) return false;
+  s.stash = s.stash || {};
+  s.stash[s.slot || 0] = { mag: s.mag, mags: s.mags };
+  s.slot = slot; s.cls = slot ? SIDEARM : s.prim;
+  const st = s.stash[slot];
+  if (st) { s.mag = st.mag; s.mags = st.mags; } else { s.mag = s.cls.mag; s.mags = Array(s.cls.mags).fill(s.cls.mag); }
+  s.reloading = false; s.scoped = false; s.heat = 0; s.fireCD = Math.max(s.fireCD, CFG.SWITCH_T);
+  if (s.isPlayer) SFX.reload();
+  return true;
+}
 function visionRange(s) { return s.cls.vision; }
 
 // Bot commander: picks a deployment pattern automatically.
@@ -32,7 +44,7 @@ function botCommanderCounts() {
 
 // Bot commander loadout: mostly rifles with a mix of specialists.
 function botLoadout() {
-  const pool = ['rifleman', 'rifleman', 'rifleman', 'rifleman', 'sniper', 'sniper', 'smg', 'smg', 'lmg', pickRand(['rifleman', 'smg', 'lmg'])];
+  const pool = ['rifleman', 'rifleman', 'rifleman', 'shotgun', 'sniper', 'sniper', 'smg', 'smg', 'lmg', pickRand(['rifleman', 'smg', 'lmg', 'shotgun'])];
   return pool.sort(() => Math.random() - 0.5);
 }
 
@@ -91,7 +103,9 @@ function spawnSoldier(s, choice) {
   Perks.reapply(G, s);
   s.hp = maxHp(s); s.alive = true; s.shield = CFG.SPAWN_SHIELD;
   refillAmmo(s); s.fireCD = 0; s.heat = 0; s.scoped = false; s.steady = true; s.steadyT = 0; s.crouch = false; s.para = 0; s.jz = 0; s.jv = 0; s.vault = null;
+  if (s.slot) s.cls = s.prim;   // always come back holding the main weapon
   if (s.nextCls) { s.cls = s.nextCls; s.nextCls = null; refillAmmo(s); }
+  s.prim = s.cls; s.slot = 0; s.stash = {};
   s.nades = Math.random() < CFG.GRENADE_CHANCE ? 1 : 0;
   s.act = null; s.actT = 0;
   s.angle = s.team === 0 ? 0 : Math.PI;
@@ -129,9 +143,14 @@ function shoot(s, moving) {
   const a = s.angle + (Math.random() - 0.5) * 2 * spread;
   const pa = clamp(s.pitch + (Math.random() - 0.5) * 2 * spread * CFG.V_SPREAD, -1.4, 1.4);
   const mx = s.x + Math.cos(s.angle) * 18, my = s.y + Math.sin(s.angle) * 18, mz = eyeZ(s) - 3;
-  const sp = s.cls.bulletSpeed, cp = Math.cos(pa);
-  G.bullets.push({ x: mx, y: my, z: mz, px: mx, py: my, vx: Math.cos(a) * sp * cp, vy: Math.sin(a) * sp * cp, vz: Math.sin(pa) * sp,
-    life: s.cls.range / sp, team: s.team, owner: s, dmg: s.cls.dmg * s.mods.dmg, sniper: s.cls === CLASSES.sniper });
+  const sp = s.cls.bulletSpeed, n = s.cls.pellets || 1, ps = s.cls.pelletSpread || 0;
+  for (let i = 0; i < n; i++) {
+    // pellets fan out evenly around the aim point (a random disc), so the cone is wide but the centre stays dense
+    const r = ps * Math.sqrt(Math.random()), th = Math.random() * TAU;
+    const ba = a + (i ? Math.cos(th) * r : 0), bp = clamp(pa + (i ? Math.sin(th) * r * 0.7 : 0), -1.4, 1.4), cp = Math.cos(bp);
+    G.bullets.push({ x: mx, y: my, z: mz, px: mx, py: my, ox: mx, oy: my, vx: Math.cos(ba) * sp * cp, vy: Math.sin(ba) * sp * cp, vz: Math.sin(bp) * sp,
+      life: s.cls.range / sp, team: s.team, owner: s, dmg: s.cls.dmg * s.mods.dmg, sniper: s.cls === CLASSES.sniper, fo: s.cls.falloff, pel: n > 1 });
+  }
   s.mag--; s.fireCD = 1 / s.cls.rate; s.heat = Math.min(0.05, s.heat + (s.cls.auto ? 0.008 : 0.03));
   const sn = s.cls === CLASSES.sniper;   // the sniper's muzzle flash is much brighter and easier to spot
   G.particles.push({ type: 'flash', x: mx, y: my, z: mz, a: s.angle, life: sn ? 0.14 : 0.05, max: sn ? 0.14 : 0.05, big: sn });
@@ -517,7 +536,12 @@ function updateBullets(dt) {
     if (!hit && bestS && bestS.isCart) { damageCart(bestS, b.dmg, b.owner); hit = true; b.x += (nx - b.x) * bestT; b.y += (ny - b.y) * bestT;
       for (let i = 0; i < 3; i++) G.particles.push({ type: 'spark', x: b.x, y: b.y, z: b.z + (nz - b.z) * bestT, vx: rand(-120, 120), vy: rand(-120, 120), life: 0.2, max: 0.2, size: 2 }); }
     else if (!hit && bestS) {
-      damage(bestS, b.dmg * (head ? CFG.HEADSHOT : 1), b.owner, head);
+      let dmg = b.dmg * (head ? CFG.HEADSHOT : 1);
+      if (b.fo) {   // shotgun pellets lose damage with distance
+        const d = Math.hypot(b.x + (nx - b.x) * bestT - b.ox, b.y + (ny - b.y) * bestT - b.oy), [d0, d1, lo] = b.fo;
+        dmg *= d <= d0 ? 1 : d >= d1 ? lo : 1 - (1 - lo) * (d - d0) / (d1 - d0);
+      }
+      damage(bestS, dmg, b.owner, head);
       hit = true; b.x = b.x + (nx - b.x) * bestT; b.y = b.y + (ny - b.y) * bestT;
     }
     if (!hit) { b.x = nx; b.y = ny; b.z = nz; b.life -= dt; if (b.life > 0) out.push(b); }

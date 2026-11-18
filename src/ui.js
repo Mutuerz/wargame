@@ -38,6 +38,7 @@ window.addEventListener('keydown', e => {
   else if (e.code === 'KeyG') throwPressed = true;
   else if (e.code === 'KeyE' && G.player.riding) { if (G.online) NET.act({ a: 'dismount' }); else dismount(G.player.riding, G.player); }
   else if (e.code === 'Space' && G.player.alive && !e.repeat) jumpPressed = true;
+  else if (G.player.alive && (e.code === 'Digit1' || e.code === 'Digit2')) selectSlot(e.code === 'Digit2' ? 1 : 0);
   else if (!G.player.alive && !G.player.riding && /^Digit[1-9]$/.test(e.code)) { const k = Object.keys(CLASSES)[+e.code.slice(5) - 1]; if (k) pickRespawnWeapon(k); }
   else if (!G.player.alive && (e.code === 'Space' || e.code === 'ArrowRight')) G.specIdx++;
   else if (!G.player.alive && e.code === 'ArrowLeft') G.specIdx--;
@@ -91,6 +92,7 @@ cv.addEventListener('mousedown', e => {
   if (e.button === 0) mouse.down = true; if (e.button === 2) mouse.right = true; });
 window.addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; if (e.button === 2) mouse.right = false; });
 cv.addEventListener('contextmenu', e => e.preventDefault());
+cv.addEventListener('wheel', e => { if (G && !G.over && G.player.alive && mouseLooks()) selectSlot((G.player.slot || 0) ? 0 : 1); }, { passive: true });
 
 // Where the crosshair points: the first thing the view ray hits (terrain or a solid), or a point far ahead.
 function lookTarget(s, maxD) {
@@ -367,7 +369,7 @@ function updateRespawnDock() {
 }
 // While dead: pick the weapon you parachute in with.
 function renderRespawnWeapons() {
-  const wrap = $('respawnOpts'), P = G.player, cur = (P.nextCls || P.cls).key;
+  const wrap = $('respawnOpts'), P = G.player, cur = (P.nextCls || P.prim || P.cls).key;
   if (wrap.childElementCount !== Object.keys(CLASSES).length) {
     wrap.innerHTML = '';
     for (const k in CLASSES) {
@@ -381,11 +383,17 @@ function renderRespawnWeapons() {
   for (const b of wrap.children) b.classList.toggle('on', b.dataset.k === cur);
   wrap.hidden = !!P.riding;
 }
+// 1 = main weapon, 2 = sidearm (online the server swaps and the next snapshot shows it)
+function selectSlot(n) {
+  const P = G.player;
+  if ((P.slot || 0) === n) return;
+  if (G.online) NET.act({ a: 'slot', n }); else switchWeapon(P, n);
+}
 function pickRespawnWeapon(k) {
   const P = G.player;
   if (!CLASSES[k] || P.alive) return;
   if (G.online) { NET.cls = k; NET.send({ t: 'cls', cls: k }); P.nextCls = CLASSES[k]; }
-  else P.nextCls = CLASSES[k] === P.cls ? null : CLASSES[k];
+  else P.nextCls = CLASSES[k] === (P.prim || P.cls) ? null : CLASSES[k];
   if (!G.online && menu.loadout) menu.loadout[0] = k;
 }
 

@@ -7,7 +7,7 @@ const SEND_EVERY = 3;          // snapshots at 20 Hz
 const ROSTER_EVERY = 30;       // scoreboard twice a second
 const LOBBY_AFTER = 25;        // seconds on the result screen before the room returns to the lobby
 const BIOMES = ['forest', 'desert', 'urban', 'snow', 'swamp'];
-const CLASSES = ['rifleman', 'sniper', 'smg', 'lmg'];
+const CLASSES = ['rifleman', 'sniper', 'smg', 'lmg', 'shotgun'];
 const MAX_PLAYERS = 20;
 
 class Room {

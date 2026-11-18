@@ -183,7 +183,7 @@ function drawHUD() {
   else if (P.mag < 8 && P.mags.length) txt('R  RELOAD', 196, by + 70, `600 11px ${D}`, '#e6ad45');
   txt(`C4 ×${P.c4}`, 196, by + 90, `600 12px ${M}`, P.c4 ? '#e6ad45' : '#5d665f');
   txt(`G ×${P.nades}`, 250, by + 90, `600 12px ${M}`, P.nades ? '#e6ad45' : '#5d665f');
-  txt(P.cls.name.toUpperCase() + (P.scoped ? '  · SCOPED' : P.ads ? '  · AIMING' : '') + (P.crouch ? '  · CROUCHED' : '') + (P.para > 0 ? `  · PARACHUTE ${Math.ceil(P.para / 20)} m` : ''), 24, by - 8, `700 12px ${D}`, P.scoped ? '#e6ad45' : '#cfd5cc');
+  txt(`${P.slot ? 2 : 1} · ` + P.cls.name.toUpperCase() + (P.scoped ? '  · SCOPED' : P.ads ? '  · AIMING' : '') + (P.crouch ? '  · CROUCHED' : '') + (P.para > 0 ? `  · PARACHUTE ${Math.ceil(P.para / 20)} m` : ''), 24, by - 8, `700 12px ${D}`, P.scoped ? '#e6ad45' : '#cfd5cc');
   if (P.alive) {
     const sf = slopeFactor(P);
     if (sf < 1) txt('▼ DOWNHILL  aim +10%', 312, by - 8, `600 12px ${D}`, '#7fd18b', 'right');

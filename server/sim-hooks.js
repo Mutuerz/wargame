@@ -35,8 +35,10 @@ const _shoot = shoot;
 shoot = function (s, moving) {
   const n = G.bullets.length;
   _shoot(s, moving);
-  const b = G.bullets[n];
-  if (b) emit('a', ['b', r1(b.x), r1(b.y), Math.round(b.vx), Math.round(b.vy), r2(b.life), b.team, b.sniper ? 1 : 0, s.id, r1(b.z), Math.round(b.vz)]);
+  for (let i = n; i < G.bullets.length; i++) {
+    const b = G.bullets[i];
+    emit('a', ['b', r1(b.x), r1(b.y), Math.round(b.vx), Math.round(b.vy), r2(b.life), b.team, b.sniper ? 1 : b.pel ? (i === n ? 2 : 3) : 0, s.id, r1(b.z), Math.round(b.vz)]);
+  }
 };
 const _damage = damage;
 damage = function (target, amount, attacker) {
@@ -128,8 +130,8 @@ const SIM = {
   // Weapon for the next life (applied on respawn); before the first spawn it applies right away.
   setClass(id, cls) {
     const s = this.get(id); if (!s || !CLASSES[cls]) return;
-    if (s.alive && G.time > 0.5) { s.nextCls = CLASSES[cls] === s.cls ? null : CLASSES[cls]; return; }
-    s.cls = CLASSES[cls]; s.nextCls = null;
+    if (s.alive && G.time > 0.5) { s.nextCls = CLASSES[cls] === (s.prim || s.cls) ? null : CLASSES[cls]; return; }
+    s.cls = s.prim = CLASSES[cls]; s.nextCls = null; s.slot = 0;
     if (s.alive) refillAmmo(s);
   },
   get(id) { return G.soldiers.find(s => s.id === id); },
@@ -148,6 +150,7 @@ const SIM = {
     if (a.a === 'reload') s.human.reload = true;
     else if (a.a === 'throw') s.human.throwAt = { x: clamp(n(a.x), 0, W), y: clamp(n(a.y), 0, H) };
     else if (a.a === 'dismount' && s.riding) dismount(s.riding, s);
+    else if (a.a === 'slot') switchWeapon(s, a.n === 1 ? 1 : 0);
     else if (a.a === 'strike') { if (callStrike(s.team, n(a.x), n(a.y))) { const st = G.strikes[G.strikes.length - 1]; if (st) st.caller = s; } }
   },
   step(dt) {
@@ -191,7 +194,7 @@ const SIM = {
     const s = this.get(id); if (!s) return null;
     return { id: s.id, alive: s.alive, hp: Math.ceil(s.hp), mag: s.mag, mags: s.mags.slice(), nades: s.nades, c4: s.c4,
       rl: s.reloading ? 1 : 0, rlT: r2(s.reloadT), rlM: r2(s.reloadMax), act: s.act, actT: r2(s.actT), pts: s.points,
-      ride: s.riding ? nid(s.riding) : 0, x: r1(s.x), y: r1(s.y), z: r1(s.z), vx: r1(s.vx), vy: r1(s.vy), cls: s.cls.key,
+      ride: s.riding ? nid(s.riding) : 0, x: r1(s.x), y: r1(s.y), z: r1(s.z), vx: r1(s.vx), vy: r1(s.vy), cls: s.cls.key, pr: (s.prim || s.cls).key,
       ack: s.human ? s.human.ack : 0, sh: r2(Math.max(0, s.shield)), sc: s.scoped ? 1 : 0, team: s.team, pa: r1(s.para || 0), st: s.steady ? 1 : 0, cr: s.crouch ? 1 : 0,
       jz: r2(s.jz || 0), jv: r1(s.jv || 0), vt: s.vault ? [r1(s.vault.x0), r1(s.vault.y0), r1(s.vault.x1), r1(s.vault.y1), r2(s.vault.t), s.vault.dur, r1(s.vault.h)] : 0 };
   },

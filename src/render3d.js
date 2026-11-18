@@ -445,14 +445,16 @@ const GUN_SPEC = {   // length, height, barrel length, magazine height, stock le
   sniper: { L: 28, H: 3.2, B: 15, mag: 3.5, stock: 10, scope: true },
   smg: { L: 15, H: 3.8, B: 4, mag: 8, stock: 5 },
   lmg: { L: 25, H: 4.6, B: 11, mag: 0, stock: 9, box: true, bipod: true },
+  shotgun: { L: 16, H: 3.6, B: 13, mag: 0, stock: 9, pump: true },
+  pistol: { L: 9, H: 3.4, B: 2, mag: 5, stock: 0 },
 };
 function gunMesh(clsKey, material) {
   const g = new THREE.Group(), sp = GUN_SPEC[clsKey] || GUN_SPEC.rifleman;
-  const metal = lam('#3e423f'), wood = clsKey === 'sniper' ? lam('#5a4330') : material;
+  const metal = lam('#3e423f'), wood = clsKey === 'sniper' || clsKey === 'shotgun' ? lam('#5a4330') : material;
   const add = (geo, m, x, y, z, rz = 0) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.rotation.z = rz; g.add(o); return o; };
   add(new THREE.BoxGeometry(sp.L, sp.H, 3), material, sp.L / 2 - 2, 0, 0);                                 // receiver
   add(new THREE.CylinderGeometry(0.75, 0.75, sp.B, 8).rotateZ(Math.PI / 2), metal, sp.L - 2 + sp.B / 2, 0.6, 0); // barrel
-  add(new THREE.BoxGeometry(sp.stock, sp.H * 1.15, 2.6), wood, -sp.stock / 2 - 1.5, -0.7, 0);              // stock
+  if (sp.stock) add(new THREE.BoxGeometry(sp.stock, sp.H * 1.15, 2.6), wood, -sp.stock / 2 - 1.5, -0.7, 0);              // stock
   add(new THREE.BoxGeometry(2, 4.2, 2.4), material, 3, -3.2, 0, -0.35);                                     // grip
   if (sp.mag) add(new THREE.BoxGeometry(2.6, sp.mag, 2.2), metal, 9, -sp.H / 2 - sp.mag / 2 + 0.6, 0, 0.18); // magazine
   add(new THREE.BoxGeometry(1.2, 1.6, 1), metal, sp.L - 3, sp.H / 2 + 0.8, 0);                              // front sight
@@ -460,6 +462,10 @@ function gunMesh(clsKey, material) {
     add(new THREE.CylinderGeometry(1.4, 1.4, 11, 10).rotateZ(Math.PI / 2), metal, 10, sp.H / 2 + 2.4, 0);
     add(new THREE.CylinderGeometry(1.8, 1.8, 2, 10).rotateZ(Math.PI / 2), metal, 16, sp.H / 2 + 2.4, 0);
   } else add(new THREE.BoxGeometry(3, 1.6, 1.6), metal, 6, sp.H / 2 + 0.8, 0);                              // rear sight
+  if (sp.pump) {   // magazine tube under the barrel and a ribbed pump grip
+    add(new THREE.CylinderGeometry(0.65, 0.65, sp.B, 8).rotateZ(Math.PI / 2), metal, sp.L - 2 + sp.B / 2, -0.9, 0);
+    add(new THREE.CylinderGeometry(1.4, 1.4, 6, 10).rotateZ(Math.PI / 2), lam('#222'), sp.L + 3, -0.6, 0);
+  }
   if (sp.box) add(new THREE.BoxGeometry(5, 5, 4.4), lam('#4b5a3a'), 8, -4.4, 1.2);                         // ammo box
   if (sp.bipod) { add(new THREE.BoxGeometry(0.7, 7, 0.7), metal, sp.L - 4, -3.5, -1.2, 0.5); add(new THREE.BoxGeometry(0.7, 7, 0.7), metal, sp.L - 4, -3.5, 1.2, 0.5); }
   g.traverse(n => { if (n.isMesh) n.castShadow = true; });
@@ -723,12 +729,12 @@ function updateTracers() {
   for (const b of G.bullets) {
     if (n >= R3.tracerN) break;
     if (b.owner === G.player || b.mine) { if (!b.seen) { b.seen = 1; continue; } }   // your own tracer starts a frame later, away from the camera
-    const sp = Math.hypot(b.vx, b.vy, b.vz || 0) || 1, L = b.sniper ? 90 : 55;
+    const sp = Math.hypot(b.vx, b.vy, b.vz || 0) || 1, L = b.sniper ? 140 : b.pel ? 50 : 90;
     const z = b.z !== undefined ? b.z : elevAt(G.m, b.x, b.y) + 26;
     p[n * 6] = b.x; p[n * 6 + 1] = z; p[n * 6 + 2] = b.y;
     p[n * 6 + 3] = b.x - b.vx / sp * L; p[n * 6 + 4] = z - (b.vz || 0) / sp * L; p[n * 6 + 5] = b.y - b.vy / sp * L;
-    const k = b.sniper ? [1, 1, 0.8] : [1, 0.85, 0.45];
-    c[n * 6] = k[0]; c[n * 6 + 1] = k[1]; c[n * 6 + 2] = k[2]; c[n * 6 + 3] = k[0] * 0.3; c[n * 6 + 4] = k[1] * 0.25; c[n * 6 + 5] = k[2] * 0.1;
+    const k = b.sniper ? [1, 1, 0.85] : [1, 0.9, 0.55];
+    c[n * 6] = k[0]; c[n * 6 + 1] = k[1]; c[n * 6 + 2] = k[2]; c[n * 6 + 3] = k[0] * 0.55; c[n * 6 + 4] = k[1] * 0.4; c[n * 6 + 5] = k[2] * 0.2;
     n++;
   }
   g.setDrawRange(0, n * 2);
@@ -783,6 +789,16 @@ function updateParticles3() {
       }
     }
   }
+  // glowing tracer heads with a fading trail, so bullets read clearly at any distance
+  const P = G.player;
+  for (const b of G.bullets) {
+    if ((b.owner === P || b.mine) && (b.gs = (b.gs || 0) + 1) < 3) continue;   // not right in front of your own eyes
+    const z = b.z !== undefined ? b.z : elevAt(m, b.x, b.y) + 26, sp = Math.hypot(b.vx, b.vy, b.vz || 0) || 1;
+    const big = b.sniper ? 1.5 : b.pel ? 0.6 : 1, ux = b.vx / sp, uy = b.vy / sp, uz = (b.vz || 0) / sp;
+    pushP(A, b.x, b.y, z, 10 * big, 1, 0.75, 0.35, 0.55);
+    pushP(A, b.x, b.y, z, 4 * big, 1, 1, 0.9, 1);
+    for (let i = 1; i <= 3; i++) pushP(A, b.x - ux * i * 18 * big, b.y - uy * i * 18 * big, z - uz * i * 18 * big, (8 - i * 1.6) * big, 1, 0.6, 0.25, 0.35 - i * 0.08);
+  }
   for (const S of [N, A]) {
     const at = S.pts.geometry.attributes;
     S.pts.geometry.setDrawRange(0, S.n);
@@ -832,34 +848,7 @@ function updateWeather(dt, cx, cz) {
   w.pts.position.set(cx, (R3.camElev || 0), cz);
 }
 
-// ---------- first-person weapon (view model)
-function buildViewModel(clsKey) {
-  if (R3.vm) vmScene.remove(R3.vm);
-  const g = new THREE.Group();
-  const gm = lam('#2a2d2b'), metal = lam('#3c403d'), hand = lam('#b88b6a'), sleeve = lam(shade(TEAMS[G.player.team].dark, 0.8));
-  const spec = { rifleman: [1.0, 0.11, 0.1], sniper: [1.35, 0.09, 0.09], smg: [0.7, 0.13, 0.11], lmg: [1.15, 0.16, 0.15] }[clsKey] || [1, 0.11, 0.1];
-  const [L, Hh, Dd] = spec;
-  const body = new THREE.Mesh(new THREE.BoxGeometry(Dd, Hh, L), gm); body.position.z = -L * 0.35;
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, L * 0.5, 8).rotateX(Math.PI / 2), metal); barrel.position.set(0, 0.02, -L * 0.85);
-  const mag = new THREE.Mesh(new THREE.BoxGeometry(0.06, clsKey === 'lmg' ? 0.14 : 0.22, 0.1), metal); mag.position.set(0, -0.15, -L * 0.3); mag.rotation.x = 0.15;
-  const stock = new THREE.Mesh(new THREE.BoxGeometry(Dd * 0.9, Hh * 1.4, 0.3), gm); stock.position.set(0, -0.03, 0.12);
-  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.16, 0.08), gm); grip.position.set(0, -0.12, -0.05); grip.rotation.x = -0.3;
-  g.add(body, barrel, mag, stock, grip);
-  if (clsKey === 'sniper') { const sc = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.42, 10).rotateX(Math.PI / 2), metal); sc.position.set(0, 0.11, -0.4); g.add(sc); }
-  if (clsKey === 'lmg') { const box = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.2), metal); box.position.set(-0.1, -0.08, -0.35); g.add(box); }
-  const handR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.16), hand); handR.position.set(0.02, -0.12, 0.02);
-  const handL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.09, 0.18), hand); handL.position.set(-0.02, -0.08, -L * 0.62);
-  const armR = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.11, 0.4), sleeve); armR.position.set(0.05, -0.17, 0.22); armR.rotation.x = 0.35;
-  const armL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.4), sleeve); armL.position.set(-0.1, -0.16, -L * 0.45); armL.rotation.set(0.3, 0.6, 0);
-  g.add(handR, handL);
-  const flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: DOT, color: '#ffd27a', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
-  flash.scale.set(0.35, 0.35, 1); flash.position.set(0, 0.02, -L * 1.12); flash.visible = false; flash.name = 'flash';
-  g.add(flash);
-  const holder = new THREE.Group(); holder.add(g); g.scale.setScalar(0.3);
-  vmScene.add(holder);
-  R3.vm = holder; R3.vmCls = clsKey; R3.vmTeam = G.player.team;
-  return;
-}
+// ---------- first-person weapon (view model): see viewmodel.js
 
 // ---------- per-frame
 // No fog of war in the 3D view: every soldier is drawn and only walls, terrain and distance haze hide them.
@@ -974,9 +963,9 @@ function render3d(dt) {
 
   // own weapon
   if (v.fp && !v.dead && !G.auto && !(P.scoped && R3.zoom > 1.5)) {
-    if (!R3.vm || R3.vmCls !== P.cls.key || R3.vmTeam !== P.team) buildViewModel(P.cls.key);
+    if (!R3.vm || R3.vmCls !== P.cls.key || R3.vmTeam !== P.team) { buildViewModel(P.cls.key); R3.lastMag = P.mag; }
     const vm = R3.vm;
-    if (P.mag < R3.lastMag && !P.reloading) { R3.kick = Math.min(1.2, R3.kick + (P.cls.key === 'sniper' ? 1.2 : 0.45)); R3.lastShotT = G.time; }
+    if (P.mag < R3.lastMag && !P.reloading) { R3.kick = Math.min(1.2, R3.kick + (P.cls.key === 'sniper' ? 1.2 : P.cls.key === 'shotgun' ? 1.0 : 0.45)); R3.lastShotT = G.time; }
     R3.lastMag = P.mag;
     const moving = Math.hypot(P.vx, P.vy) > 20, sprint = moving && Math.hypot(P.vx, P.vy) > CFG.WALK * 1.15;
     const bx = moving ? Math.sin(P.walkPhase * 0.5) * 0.025 : 0, by = moving ? Math.abs(Math.cos(P.walkPhase * 0.5)) * 0.02 : Math.sin(performance.now() / 900) * 0.004;
@@ -987,6 +976,7 @@ function render3d(dt) {
     vm.rotation.set(R3.kick * 0.08 * (1 - ad * 0.6) + rl * 0.5 + (sprint ? -0.35 : 0), (sprint ? 0.5 : 0.04) * (1 - ad), rl * 0.6);
     const fl = vm.getObjectByName('flash');
     fl.visible = G.time - R3.lastShotT < 0.05; fl.material.rotation = Math.random() * TAU;
+    animateViewModel();
     gl3.autoClear = false;
     gl3.clearDepth();
     gl3.render(vmScene, vmCam);

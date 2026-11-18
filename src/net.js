@@ -170,7 +170,7 @@ const NET = {
     for (const [id, name, cls, human, k, d, pts, alive, off] of r) {
       const s = G.soldiers.find(x => x.id === id); if (!s) continue;
       s.off = !!off;
-      s.name = name; s.cls = CLASSES[cls] || s.cls; s.human = !!human; s.kills = k; s.deaths = d; s.points = pts; s.rAlive = !!alive;
+      s.name = name; s.cls = weaponByKey(cls) || s.cls; s.human = !!human; s.kills = k; s.deaths = d; s.points = pts; s.rAlive = !!alive;
     }
   },
 
@@ -192,7 +192,7 @@ const NET = {
     const P = G.player;
     P.hp = me.hp; P.mag = me.mag; P.mags = me.mags; P.nades = me.nades; P.c4 = me.c4;
     P.reloading = !!me.rl; P.reloadT = me.rlT; P.reloadMax = me.rlM || 1; P.act = me.act; P.actT = me.actT;
-    P.points = me.pts; P.shield = me.sh; P.cls = CLASSES[me.cls] || P.cls;
+    P.points = me.pts; P.shield = me.sh; P.cls = weaponByKey(me.cls) || P.cls; P.prim = CLASSES[me.pr] || P.prim; P.slot = P.cls === SIDEARM ? 1 : 0;
     if (performance.now() - (this.shotAt || 0) > 400) P.steady = !!me.st;   // a local shot wins until the server catches up
     if (P.reloading && !this.wasReloading) SFX.reload();
     this.wasReloading = P.reloading;
@@ -222,8 +222,9 @@ const NET = {
     const P = G.player, k = e[0];
     if (k === 'b') {
       const [, x, y, vx, vy, life, team, sniper, owner, z, vz] = e;
-      G.bullets.push({ x, y, z: z || 0, vx, vy, vz: vz || 0, life, team, sniper: !!sniper, mine: owner === P.id });
-      G.particles.push({ type: 'flash', x, y, z: z || undefined, a: Math.atan2(vy, vx), life: sniper ? 0.14 : 0.05, max: sniper ? 0.14 : 0.05, big: !!sniper });
+      G.bullets.push({ x, y, z: z || 0, vx, vy, vz: vz || 0, life, team, sniper: sniper === 1, pel: sniper >= 2, mine: owner === P.id });
+      if (sniper === 3) return;   // extra shotgun pellets: one flash and one bang per shot
+      G.particles.push({ type: 'flash', x, y, z: z || undefined, a: Math.atan2(vy, vx), life: sniper === 1 ? 0.14 : 0.05, max: sniper === 1 ? 0.14 : 0.05, big: sniper === 1 });
       if (Math.random() < 0.5) { const a = Math.atan2(vy, vx); stampCasing(G.art, x - Math.cos(a) * 26 + Math.cos(a + 1.6) * 16, y - Math.sin(a) * 26 + Math.sin(a + 1.6) * 16); }
       SFX.shot(x, y, owner === P.id);
     } else if (k === 'hit') {
@@ -233,7 +234,7 @@ const NET = {
       if (tid === P.id) { G.hurtT = 0.45; P.lastHitBy = G.soldiers.find(s => s.id === aid) || null; }
       if (aid === P.id && tid !== P.id) { G.hitT = 0.15; SFX.hit(); }
     } else if (k === 'body') {
-      stampBody(G.art, { x: e[1], y: e[2], angle: e[3], team: e[4], fallA: e[5], z: e[6] || 0, para: e[7] || 0, cls: CLASSES[e[8]] || CLASSES.rifleman });
+      stampBody(G.art, { x: e[1], y: e[2], angle: e[3], team: e[4], fallA: e[5], z: e[6] || 0, para: e[7] || 0, cls: weaponByKey(e[8]) || CLASSES.rifleman });
     } else if (k === 'boom') {
       netExplosionFx(e[1], e[2]);
     } else if (k === 'scorch') {

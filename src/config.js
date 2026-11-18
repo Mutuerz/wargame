@@ -73,6 +73,7 @@ const CFG = {
   ADS_ACC: 1.5,               // aiming down the sights divides spread by this
   ADS_SPEED: 0.6,             // movement speed while aiming down the sights
   ADS_ZOOM: 1.35,             // camera zoom while aiming down the sights
+  SWITCH_T: 0.45,             // seconds to swap between the main weapon (1) and the sidearm (2)
   STEADY_T: 2,                // seconds without shooting or moving before the next shot is dead accurate again
   CROUCH_ACC: 1.2,            // crouching (Ctrl) divides spread by this; you cannot move while crouched
   CROUCH_EYE: 19, CROUCH_BODY: 25, CROUCH_HEAD: 18,
@@ -118,15 +119,28 @@ const CLASSES = {
     name: 'Machine gun', mag: 60, mags: 1, rate: 9, reload: 4.5, reloadEmpty: 5, dmg: 16,
     bulletSpeed: 1500, range: 1300, spread: 0.05, spreadMove: 0.11, speed: 0.85, vision: 1300, auto: true,
   },
+  // Pump shotgun: 9 pellets in a wide cone. Point blank one shot kills; damage fades past ~110 px and the pellets stop at 560.
+  shotgun: {
+    name: 'Shotgun', mag: 6, mags: 3, rate: 1.3, reload: 2.6, reloadEmpty: 3.0, dmg: 14,
+    bulletSpeed: 1300, range: 560, spread: 0.03, spreadMove: 0.06, speed: 1.05, vision: 1300, auto: false,
+    pellets: 9, pelletSpread: 0.1, falloff: [110, 480, 0.2],
+  },
 };
 for (const k in CLASSES) CLASSES[k].key = k;
+// Sidearm everyone carries on key 2: a small automatic machine pistol with 8-round magazines.
+const SIDEARM = {
+  key: 'pistol', name: 'Machine pistol', mag: 8, mags: 4, rate: 13, reload: 1.4, reloadEmpty: 1.7, dmg: 11,
+  bulletSpeed: 1300, range: 650, spread: 0.05, spreadMove: 0.07, speed: 1, vision: 1300, auto: true,
+};
+const weaponByKey = k => CLASSES[k] || (k === SIDEARM.key ? SIDEARM : null);
 const WEAPON_BLURB = {
   rifleman: 'Assault rifle · 25 rds · all-round',
   sniper: 'Bolt sniper · 5 rds · scope, 75 dmg',
   smg: 'SMG · 30 rds · fast, short range',
   lmg: 'Machine gun · 60 rds · slow, long reload',
+  shotgun: 'Pump shotgun · 6 shells · deadly up close, wide spread',
 };
-const DEFAULT_LOADOUT = ['rifleman', 'rifleman', 'rifleman', 'sniper', 'rifleman', 'smg', 'rifleman', 'sniper', 'lmg', 'smg'];
+const DEFAULT_LOADOUT = ['rifleman', 'rifleman', 'rifleman', 'sniper', 'shotgun', 'smg', 'rifleman', 'sniper', 'lmg', 'smg'];
 
 const SKILLS = [
   { name: 'Recruit', react: [0.45, 0.8], aimErr: [0.28, 0.4], minErr: 0.06, turn: 4.5, range: 800 },
