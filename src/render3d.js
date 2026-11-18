@@ -792,7 +792,7 @@ function render3d(dt) {
   SFX.listener.x = v.x; SFX.listener.y = v.y;
   R3.camElev = v.z;
   // scope zoom
-  const zoomT = v.fp && P.scoped ? CFG.SCOPE_ZOOM : 1;
+  const zoomT = v.fp && P.scoped ? CFG.SCOPE_ZOOM : v.fp && P.ads ? CFG.ADS_ZOOM : 1;
   R3.zoom = lerp(R3.zoom, zoomT, 1 - Math.exp(-dt * 14));
   if (Math.abs(R3.zoom - zoomT) < 0.02) R3.zoom = zoomT;
   const fov = 2 * Math.atan(Math.tan(CFG.FOV * Math.PI / 360) / R3.zoom) * 180 / Math.PI;
@@ -843,8 +843,10 @@ function render3d(dt) {
     const moving = Math.hypot(P.vx, P.vy) > 20, sprint = moving && Math.hypot(P.vx, P.vy) > CFG.WALK * 1.15;
     const bx = moving ? Math.sin(P.walkPhase * 0.5) * 0.025 : 0, by = moving ? Math.abs(Math.cos(P.walkPhase * 0.5)) * 0.02 : Math.sin(performance.now() / 900) * 0.004;
     const rl = P.reloading ? Math.sin(clamp(1 - P.reloadT / P.reloadMax, 0, 1) * Math.PI) : 0;
-    vm.position.set(0.12 + bx + (sprint ? 0.03 : 0), -0.11 - by - rl * 0.1 + (sprint ? -0.02 : 0), -0.2 + R3.kick * 0.03);
-    vm.rotation.set(R3.kick * 0.08 + rl * 0.5 + (sprint ? -0.35 : 0), (sprint ? 0.5 : 0.04), rl * 0.6);
+    R3.adsT = lerp(R3.adsT || 0, P.ads ? 1 : 0, 1 - Math.exp(-dt * 14));
+    const ad = R3.adsT;
+    vm.position.set(lerp(0.12 + bx + (sprint ? 0.03 : 0), 0, ad), lerp(-0.11 - by + (sprint ? -0.02 : 0), -0.062, ad) - rl * 0.1, lerp(-0.2, -0.17, ad) + R3.kick * 0.03 * (1 - ad * 0.5));
+    vm.rotation.set(R3.kick * 0.08 * (1 - ad * 0.6) + rl * 0.5 + (sprint ? -0.35 : 0), (sprint ? 0.5 : 0.04) * (1 - ad), rl * 0.6);
     const fl = vm.getObjectByName('flash');
     fl.visible = G.time - R3.lastShotT < 0.05; fl.material.rotation = Math.random() * TAU;
     gl3.autoClear = false;

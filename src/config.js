@@ -69,6 +69,9 @@ const CFG = {
   SCOPE_ZOOM: 5,              // sniper scope magnification
   SENS: 0.0022,               // mouse look sensitivity (radians per pixel)
   V_SPREAD: 0.6,              // vertical spread relative to horizontal
+  ADS_ACC: 1.5,               // aiming down the sights divides spread by this
+  ADS_SPEED: 0.6,             // movement speed while aiming down the sights
+  ADS_ZOOM: 1.35,             // camera zoom while aiming down the sights
 };
 // Obstacle heights above the ground they stand on (px). Windows leave a gap you can see and shoot through.
 const OBST_H = {

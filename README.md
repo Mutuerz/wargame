@@ -28,7 +28,7 @@ free Oracle Cloud VM (setup script included) is in [deploy/README.md](deploy/REA
 | R | Reload |
 | Shift | Sprint (you cannot fire while sprinting) |
 | G | Throw a grenade where you look (look up to throw at full range) |
-| Right click (hold) or Q | Sniper scope: hold position, 5× zoom, see farther |
+| Right click (hold) or Q | Aim down the sights: 1.5× better accuracy, slight zoom, walk at 60% speed, no sprint. Snipers get the scope instead: hold position, 5× zoom, see farther |
 | B | Air strike: opens the map, click to mark a target (needs 500 team points). Esc cancels |
 | E | Jump off the transport cart early |
 | Click / Space / ← → (while dead) | Switch which teammate you watch (camera behind them) |

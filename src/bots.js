@@ -235,6 +235,7 @@ function botThink(s, dt) {
     } else if (d < 220) { moveX -= dx / d * 0.5; moveY -= dy / d * 0.5; }
     // snipers hold still and scope in at range
     if (sniper && b.vis && d > 450) { moveX = 0; moveY = 0; ctl.scope = true; }
+    else if (!sniper && b.vis && d > 380) ctl.scope = true;   // aim down the sights at range
     // sappers and defusers keep pushing to their goal while fighting
     if (b.obj && (b.obj.type === 'plant' || b.obj.type === 'defuse') && d > 300) {
       const [fx, fy] = followPath(s, b.obj.x, b.obj.y, dt);

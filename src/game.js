@@ -8,7 +8,7 @@ function makeSoldier(team, idx, isPlayer) {
     id: team * 100 + idx, team, idx, isPlayer, name: CALLSIGNS[team][idx] || (TEAMS[team].name + '-' + (idx + 1)),
     x: 0, y: 0, z: 0, vx: 0, vy: 0, angle: team === 0 ? 0 : Math.PI, pitch: 0,
     hp: CFG.HP, alive: false, respawnT: 0, shield: 0,
-    cls: CLASSES.rifleman, nades: 0, scoped: false, aimX: 0, aimY: 0,
+    cls: CLASSES.rifleman, nades: 0, scoped: false, ads: false, aimX: 0, aimY: 0,
     mag: 25, mags: [], reloading: false, reloadT: 0, reloadMax: 1, fireCD: 0, heat: 0,
     c4: 0, act: null, actT: 0, cacheCD: 0,
     spot: 0, kills: 0, deaths: 0, points: 0, perks: [], mods: { speed: 1, reload: 1, dmg: 1, maxHp: 1, spread: 1 },
@@ -165,6 +165,7 @@ function slopeFactor(s) {
 function currentSpread(s, moving) {
   let sp = (moving ? s.cls.spreadMove : s.cls.spread) * s.mods.spread + s.heat;
   if (s.scoped) sp *= s.cls.scopeSpread;
+  else if (s.ads) sp /= CFG.ADS_ACC;
   return sp * slopeFactor(s);
 }
 
@@ -204,11 +205,13 @@ function updateSoldier(s, dt, ctl) {
   if (ml > 1) { mvx /= ml; mvy /= ml; }
   const moving = ml > 0.1;
   const fire = ctl.fire;
-  const sprint = ctl.sprint && moving && !fire && !s.reloading;
+  const sprint = ctl.sprint && moving && !fire && !s.reloading && !(ctl.scope && !s.cls.scopeRange);
 
   if (ctl.aimX !== undefined) { s.aimX = ctl.aimX; s.aimY = ctl.aimY; }
   if (ctl.pitch !== undefined) s.pitch = clamp(ctl.pitch, -1.4, 1.4);
   s.scoped = !!(ctl.scope && s.cls.scopeRange && !moving && !s.reloading);
+  // aiming down the sights (every gun but the sniper, whose right click is the scope): tighter aim, slower walk
+  s.ads = !!(ctl.scope && !s.cls.scopeRange && !s.reloading);
   if (ctl.throwAt && s.nades > 0) throwGrenade(s, ctl.throwAt.x, ctl.throwAt.y);
   if (ctl.reload) startReload(s);
   if (s.reloading) { s.reloadT -= dt; if (s.reloadT <= 0) finishReload(s); }
@@ -228,6 +231,7 @@ function updateSoldier(s, dt, ctl) {
   if (m.slow[((s.y / CELL) | 0) * GW + ((s.x / CELL) | 0)]) speed *= 0.5;
   if (s.reloading) speed *= 0.85;
   if (fire) speed *= 0.8;
+  if (s.ads) speed *= CFG.ADS_SPEED;
   const k = 1 - Math.exp(-dt * 14);
   s.vx = lerp(s.vx, mvx * speed, k); s.vy = lerp(s.vy, mvy * speed, k);
   const ox = s.x, oy = s.y;

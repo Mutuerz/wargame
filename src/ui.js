@@ -107,8 +107,9 @@ function playerControl(s) {
   // forward along the view, right is 90 degrees clockwise on the map
   let mx = cy * f - sy * r, my = sy * f + cy * r;
   s.angle = yaw;
-  const scope = (mouse.right || keys.has('KeyQ')) && !!s.cls.scopeRange;
-  if (scope) { mx = 0; my = 0; }   // scoping means holding position
+  // right click / Q: the sniper scope (hold still), or aim down the sights with any other gun
+  const scope = mouse.right || keys.has('KeyQ');
+  if (scope && s.cls.scopeRange) { mx = 0; my = 0; }   // scoping means holding position
   const tgt = lookTarget(s, 1500);
   const ctl = { mx, my, fire: mouse.down && !G.paused && !G.showMap, sprint: keys.has('ShiftLeft') || keys.has('ShiftRight'), reload: reloadPressed, interact: keys.has('KeyF'),
     scope, aimX: tgt.x, aimY: tgt.y, pitch: look.pitch, throwAt: null };
