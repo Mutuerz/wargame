@@ -588,7 +588,7 @@ function addBody(x, y, angle, team, z, fallA, cls, air) {
   g.position.set(x, ground + (air || 0), y);
   scene3.add(g);
   const knock = kind === 'back' ? rand(14, 26) : kind === 'fwd' ? rand(4, 10) : rand(8, 16);
-  R3.bodies.push({ g, t: 0, kind, x, y, ground, air: air || 0, kx: Math.cos(fallA) * knock, ky: Math.sin(fallA) * knock,
+  R3.bodies.push({ g, t: 0, born: G.time, kind, x, y, ground, air: air || 0, kx: Math.cos(fallA) * knock, ky: Math.sin(fallA) * knock,
     dur: kind === 'fwd' ? 0.95 : 0.7, side: Math.random() < 0.5 ? 1 : -1, armA: rand(-1.4, -0.6) });
   if (R3.bodies.length > 18) { const b = R3.bodies.shift(); scene3.remove(b.g); disposeModel(b.g); }
 }
@@ -1068,7 +1068,7 @@ function render3d(dt) {
   const v = cameraView(P);
   R3.lastCam = v;
   // hide your own body while the death camera lies where it fell
-  for (const b of R3.bodies) b.g.visible = !(v.dead && Math.hypot(b.x - v.x, b.y - v.y) < 40);
+  for (const b of R3.bodies) b.g.visible = !b.kcHide && !(v.dead && Math.hypot(b.x - v.x, b.y - v.y) < 40);
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const sh = reduce ? 0 : G.cam.shake * 0.4;
   R3.kick = Math.max(0, R3.kick - dt * 6);
@@ -1081,7 +1081,8 @@ function render3d(dt) {
   // scope zoom
   const VW_ = v.who || P;   // whose eyes: yours, or the kill cam / first-person spectating target
   R3.vScoped = !!(v.fp && !v.dead && VW_.scoped);
-  const zoomT = v.dead ? 1 : v.fp && VW_.scoped ? CFG.SCOPE_ZOOM : v.fp && VW_.ads ? CFG.ADS_ZOOM : 1;
+  const adsZ = VW_ === P ? (P.cls.scopeRange ? 0 : P.aimP || 0) : VW_.ads ? 1 : 0;   // the zoom grows as the sights come up
+  const zoomT = v.dead ? 1 : v.fp && VW_.scoped ? CFG.SCOPE_ZOOM : v.fp ? 1 + (CFG.ADS_ZOOM - 1) * adsZ : 1;
   R3.zoom = lerp(R3.zoom, zoomT, 1 - Math.exp(-dt * 14));
   if (Math.abs(R3.zoom - zoomT) < 0.02) R3.zoom = zoomT;
   const fov = 2 * Math.atan(Math.tan((CFG.FOV + (v.fovAdd || 0)) * Math.PI / 360) / R3.zoom) * 180 / Math.PI;
@@ -1166,7 +1167,8 @@ function render3d(dt) {
     const moving = Math.hypot(P.vx, P.vy) > 20, sprint = moving && Math.hypot(P.vx, P.vy) > CFG.WALK * 1.15;
     const bx = moving ? Math.sin(P.walkPhase * 0.5) * 0.025 : 0, by = moving ? Math.abs(Math.cos(P.walkPhase * 0.5)) * 0.02 : Math.sin(performance.now() / 900) * 0.004;
     const rl = P.reloading ? Math.sin(clamp(1 - P.reloadT / P.reloadMax, 0, 1) * Math.PI) : 0;
-    R3.adsT = lerp(R3.adsT || 0, P.ads ? 1 : 0, 1 - Math.exp(-dt * 14));
+    const ap = P.aimP || 0, apE = ap * ap * (3 - 2 * ap);   // the gun rises to the eye over the aim delay
+    R3.adsT = lerp(R3.adsT || 0, apE, 1 - Math.exp(-dt * 20));
     const ad = R3.adsT;
     if (!feelWeapon(P, dt, vm, { ads: ad, sprint, reload: rl })) {
         vm.position.set(lerp(0.12 + bx + (sprint ? 0.03 : 0), 0, ad), lerp(-0.11 - by + (sprint ? -0.02 : 0), -(R3.vmSpec?.sight ?? 0.207) * 0.3, ad) - rl * 0.1, lerp(-0.2, -0.17, ad) + R3.kick * 0.03 * (1 - ad * 0.5));

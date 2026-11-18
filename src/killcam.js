@@ -12,15 +12,16 @@ const KC = {
   frames: [], acc: 0, wasAlive: true,
   clip: null, killer: null, t: 0, t0: 0, t1: 0, saved: null, savedB: null, label: '',
 };
-const KC_LEN = 5, KC_HZ = 30, KC_SLOW = 0.6;
+const KC_LEN = 5, KC_AFTER = 1, KC_HZ = 30;   // 5 s before your death and 1 s after it (your body falling)
 
 // ---------- recording (called once per rendered frame, after the simulation step)
 function kcRecord(dt) {
   if (!KC.enabled || !G || !G.soldiers) { KC.frames.length = 0; return; }
   const P = G.player;
-  // death: freeze the last 5 s, to replay once the death fall is over
-  if (P && KC.wasAlive && !P.alive) kcCapture(P);
-  if (P) { KC.wasAlive = P.alive; if (P.alive && KC.on) kcStop(); }
+  // death: keep recording one more second (your body going down), then freeze the clip for the replay
+  if (P && KC.wasAlive && !P.alive) { const k = P.lastHitBy; KC.pend = k && k !== P && k.team !== P.team ? { k, td: G.time } : null; KC.clip = null; KC.wait = 2.3; }
+  if (P) { KC.wasAlive = P.alive; if (P.alive) { KC.pend = null; if (KC.on || KC.clip) kcStop(); } }
+  if (KC.pend && G.time >= KC.pend.td + KC_AFTER) kcCapture();
   if (KC.on) return;   // no need to record while watching
   KC.acc += dt;
   if (KC.acc < 1 / KC_HZ) return;
@@ -33,17 +34,16 @@ function kcRecord(dt) {
   const b = [];
   for (const u of G.bullets) if (b.length < 60) b.push({ x: u.x, y: u.y, z: u.z, vx: u.vx, vy: u.vy, vz: u.vz, sniper: u.sniper, pel: u.pel, team: u.team, life: u.life, gs: 9, seen: 1 });
   KC.frames.push({ t: G.time, s, b });
-  while (KC.frames.length && KC.frames[0].t < G.time - KC_LEN - 0.5) KC.frames.shift();
+  while (KC.frames.length && KC.frames[0].t < G.time - KC_LEN - KC_AFTER - 0.5) KC.frames.shift();
 }
 
-function kcCapture(P) {
-  const k = P.lastHitBy;
-  if (!k || k.team === P.team || k === P || KC.frames.length < 10) { KC.clip = null; return; }
+function kcCapture() {
+  const { k, td } = KC.pend; KC.pend = null;
+  if (KC.frames.length < 10) { KC.clip = null; return; }
   const end = KC.frames[KC.frames.length - 1].t;
-  KC.clip = KC.frames.filter(f => f.t >= end - KC_LEN);
+  KC.clip = KC.frames.filter(f => f.t >= td - KC_LEN);
   KC.frames = [];
-  KC.wait = 2.3;
-  KC.killer = k; KC.t0 = KC.clip[0].t; KC.t1 = end; KC.t = KC.t0;
+  KC.killer = k; KC.td = td; KC.t0 = KC.clip[0].t; KC.t1 = end; KC.t = KC.t0;
   KC.label = `${k.name}${k.cls ? ' · ' + k.cls.name : ''}`;
 }
 
@@ -51,9 +51,10 @@ function kcCapture(P) {
 function kcUpdate(dt) {
   const P = G && G.player;
   if (!P) return;
-  if (!KC.on && KC.clip && !P.alive && (KC.wait -= dt) <= 0) KC.on = true;   // after the 2.2 s death fall
+  KC.wait -= dt;
+  if (!KC.on && KC.clip && !P.alive && (R3.death ? R3.death.t >= 2.2 : KC.wait <= 0)) KC.on = true;   // after the 2.2 s death fall
   if (!KC.on) return;
-  const slow = KC.t > KC.t1 - KC_SLOW ? 0.35 : 1;
+  const slow = KC.t > KC.td - 0.5 && KC.t < KC.td + 0.25 ? 0.35 : 1;   // slow motion around the killing shot
   KC.t += dt * slow;
   if (KC.t >= KC.t1 + 0.4) kcStop();
 }
@@ -87,11 +88,21 @@ function kcBegin() {
   // soldiers not in the recording at this moment are hidden for the frame
   for (const q of G.soldiers) if (!seen.has(q)) { const o = {}; for (const k of KC_FIELDS) o[k] = q[k]; saved.set(q, o); q.alive = false; }
   KC.saved = saved; KC.savedB = G.bullets; G.bullets = a.b;
+  // bodies: hidden until they fall in the replay, then posed at their age at that moment (your own included)
+  KC.bodies = [];
+  for (const bd of R3.bodies) {
+    if (bd.born === undefined) continue;
+    KC.bodies.push([bd, bd.t]);
+    const age = KC.t - bd.born;
+    if (age < 0) bd.kcHide = true; else { bd.t = age; animateBody(bd, 0); }
+  }
 }
 function kcEnd() {
   if (!KC.saved) return;
   for (const [q, o] of KC.saved) for (const k of KC_FIELDS) q[k] = o[k];
   G.bullets = KC.savedB; KC.saved = null; KC.savedB = null;
+  for (const [bd, t] of KC.bodies || []) { bd.t = t; bd.kcHide = false; animateBody(bd, 0); }
+  KC.bodies = null;
 }
 
 // the camera: the killer's own eyes, looking where they aimed (render3d draws their gun and hides their body)
@@ -113,7 +124,7 @@ function kcOverlay() {
   const p = clamp((KC.t - KC.t0) / Math.max(0.1, KC.t1 - KC.t0), 0, 1);
   ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(VW * 0.3, VH - bar / 2 - 2, VW * 0.4, 4);
   ctx.fillStyle = '#ff5a4e'; ctx.fillRect(VW * 0.3, VH - bar / 2 - 2, VW * 0.4 * p, 4);
-  if (KC.t > KC.t1 - KC_SLOW) txt('SLOW MOTION', VW / 2, VH - bar - 18, `700 13px ${D}`, '#ffd27a', 'center', 'middle');
+  if (KC.t > KC.td - 0.5 && KC.t < KC.td + 0.25) txt('SLOW MOTION', VW / 2, VH - bar - 18, `700 13px ${D}`, '#ffd27a', 'center', 'middle');
 }
 
 window.addEventListener('keydown', e => {

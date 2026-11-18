@@ -56,7 +56,7 @@ const CFG = {
   HOLD_REWARD: 5,             // per held point, every HOLD_TICK seconds
   HOLD_TICK: 10,
   SABOTAGE_REWARD: 50,
-  TIME_LIMIT: 10 * 60,
+  TIME_LIMIT: 4 * 60,
   VIEW_H: 1000,               // world pixels visible vertically (top-down map views)
   // ---- 3D (world units are the same pixels as the map; about 20 px = 1 m)
   LEVEL_H: 60,                // height of one terrain level
@@ -79,6 +79,7 @@ const CFG = {
   ADS_ACC: 1.5,               // aiming down the sights divides spread by this
   ADS_SPEED: 0.6,             // movement speed while aiming down the sights
   ADS_ZOOM: 1.35,             // camera zoom while aiming down the sights
+  ADS_DELAY: 0.3, SCOPE_DELAY: 0.8,   // seconds to bring the sights / the sniper scope up to your eye
   SWITCH_T: 0.45,             // seconds to swap between the main weapon (1) and the sidearm (2)
   STEADY_T: 1,                // seconds standing still without shooting before the next shot is dead accurate (moving cancels it)
   CROUCH_ACC: 1.2,            // crouching (Ctrl) divides spread by this; you cannot move while crouched

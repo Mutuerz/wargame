@@ -327,15 +327,13 @@ const NET = {
     const ctl = playerControl(P);
     P.aimX = ctl.aimX; P.aimY = ctl.aimY;
     const flags = (ctl.fire ? 1 : 0) | (ctl.sprint ? 2 : 0) | (ctl.interact ? 4 : 0) | (ctl.scope ? 8 : 0) | (ctl.crouch ? 16 : 0) | (ctl.jump ? 32 : 0);
-    const inp = { seq: ++this.seq, mx: ctl.mx, my: ctl.my, fire: !!ctl.fire, sprint: !!ctl.sprint, ads: !!(ctl.scope && !P.cls.scopeRange), crouch: !!ctl.crouch, jump: !!ctl.jump, angle: P.angle };
+    aimStep(P, ctl.scope, Math.hypot(ctl.mx, ctl.my) > 0.1, NET_STEP);
+    const inp = { seq: ++this.seq, mx: ctl.mx, my: ctl.my, fire: !!ctl.fire, sprint: !!ctl.sprint, ads: P.ads, crouch: !!ctl.crouch, jump: !!ctl.jump, angle: P.angle };
     if ((ctl.fire && P.mag > 0 && !P.reloading) || ctl.mx || ctl.my) { P.steady = false; this.shotAt = performance.now(); }   // moving loses it at once too
     this.send({ t: 'i', d: [0, inp.seq, ctl.mx, ctl.my, flags, Math.round(ctl.aimX), Math.round(ctl.aimY), Math.round(ctl.pitch * 1000)] });
     if (ctl.reload) this.act({ a: 'reload' });
     if (ctl.throwAt) this.act({ a: 'throw', x: Math.round(ctl.throwAt.x), y: Math.round(ctl.throwAt.y) });
     if (this.pred) { netMove(this.pred, inp, NET_STEP); this.pending.push(inp); if (this.pending.length > 120) this.pending.shift(); }
-    const moving = Math.hypot(ctl.mx, ctl.my) > 0.1;
-    P.scoped = !!(ctl.scope && P.cls.scopeRange && !moving && !P.reloading);
-    P.ads = !!(ctl.scope && !P.cls.scopeRange && !P.reloading);
     P.crouch = !!(ctl.crouch && !(P.para > 0));
   },
 

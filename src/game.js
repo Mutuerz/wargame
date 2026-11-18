@@ -290,6 +290,18 @@ function kill(s, killer, head) {
   if (s.bot) s.bot.role = null;
 }
 
+// ---------------- Aiming: holding right click raises the sights (ADS_DELAY) or the sniper scope (SCOPE_DELAY) to your
+// eye; only once it is up do you get the tighter aim / scope. aimP (0..1) drives the raise animation.
+// Every gun but the sniper aims down the sights (tighter aim, slower walk); the sniper's right click is the scope,
+// which needs you to stand still. Shared with the online prediction.
+function aimStep(s, held, moving, dt) {
+  const want = !!(held && !s.reloading && !(s.cls.scopeRange && moving));
+  s.aimT = want ? (s.aimT || 0) + dt : 0;
+  s.aimP = clamp(s.aimT / (s.cls.scopeRange ? CFG.SCOPE_DELAY : CFG.ADS_DELAY), 0, 1);
+  s.scoped = want && !!s.cls.scopeRange && s.aimP >= 1;
+  s.ads = want && !s.cls.scopeRange && s.aimP >= 1;
+}
+
 // ---------------- Slide: press crouch while sprinting on the ground. You shoot forward at 1.5x your speed, low like
 // a crouch, the speed dies off fast, and you cannot steer or jump until it is over. Shared with the online prediction.
 function slideCheck(s, crouch, grounded) {
@@ -334,9 +346,7 @@ function updateSoldier(s, dt, ctl) {
 
   if (ctl.aimX !== undefined) { s.aimX = ctl.aimX; s.aimY = ctl.aimY; }
   if (ctl.pitch !== undefined) s.pitch = clamp(ctl.pitch, -1.4, 1.4);
-  s.scoped = !!(ctl.scope && s.cls.scopeRange && !moving && !s.reloading);
-  // aiming down the sights (every gun but the sniper, whose right click is the scope): tighter aim, slower walk
-  s.ads = !!(ctl.scope && !s.cls.scopeRange && !s.reloading);
+  aimStep(s, ctl.scope, moving, dt);
   if (ctl.throwAt && s.nades > 0) throwGrenade(s, ctl.throwAt.x, ctl.throwAt.y);
   if (ctl.reload) startReload(s);
   if (s.reloading) { s.reloadT -= dt; if (s.reloadT <= 0) finishReload(s); }
