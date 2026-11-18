@@ -436,6 +436,13 @@ function recoilFrame(dt) {
   }
   RC.cls = P.cls; RC.lastMag = P.mag;
   if (RC.rec > 0 && now - RC.lastT > 0.12) { const d = RC.rec * (1 - Math.exp(-dt * 7)); look.pitch -= d; RC.rec -= d; if (RC.rec < 1e-4) RC.rec = 0; }
+  // scope sway: through the sniper scope the aim itself drifts in a slow, uneven figure-eight (you have to time the
+  // shot or correct with the mouse). It builds up over half a second after scoping in; crouching halves it.
+  RC.swT = P.scoped ? Math.min(1, (RC.swT || 0) + dt / 0.5) : 0;
+  const amp = CFG.SCOPE_SWAY * RC.swT * (P.crouch ? 0.5 : 1), t = now;
+  const sx = amp * (Math.sin(t * 1.1) * 0.7 + Math.sin(t * 2.3 + 1.7) * 0.3), sy = amp * (Math.sin(t * 2.2 + 0.5) * 0.45 + Math.sin(t * 0.7 + 2.1) * 0.35);
+  look.yaw += sx - (RC.sx || 0); look.pitch = clamp(look.pitch + sy - (RC.sy || 0), -1.45, 1.45);
+  RC.sx = sx; RC.sy = sy;
 }
 
 // ---------- loop

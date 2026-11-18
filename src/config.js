@@ -69,6 +69,7 @@ const CFG = {
   TWO_STOREY: 0.67,           // share of houses that get an upper floor
   FOV: 75,                    // camera field of view (degrees)
   SCOPE_ZOOM: 5,              // sniper scope magnification
+  SCOPE_SWAY: 0.009,          // radians the scoped aim wobbles (crouched: half)
   SENS: 0.0022,               // mouse look sensitivity (radians per pixel)
   RECOIL_BACK: 0.55,          // share of the recoil climb the aim drifts back down after you stop firing
   V_SPREAD: 0.6,              // vertical spread relative to horizontal

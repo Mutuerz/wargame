@@ -157,6 +157,7 @@ function shoot(s, moving) {
   G.particles.push({ type: 'flash', x: mx, y: my, z: mz, a: s.angle, life: sn ? 0.14 : 0.05, max: sn ? 0.14 : 0.05, big: sn });
   if (Math.random() < 0.5) stampCasing(G.art, s.x + Math.cos(s.angle + 1.6) * 16, s.y + Math.sin(s.angle + 1.6) * 16);
   if (s.cls.pellets) SFX.shotgun(s.x, s.y, s.isPlayer, () => s.alive && s.mag > 0 && s.cls.pellets);
+  else if (s.cls === CLASSES.sniper && SFX.sniper) SFX.sniper(s.x, s.y, s.isPlayer);
   else SFX.shot(s.x, s.y, s.isPlayer);
 }
 

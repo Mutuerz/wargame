@@ -15,7 +15,7 @@ const SFX = {
   listener: { x: 0, y: 0 },
   boom(x, y) { emit('a', ['boom', r1(x), r1(y)]); },
   beep(x, y) { emit('a', ['beep', r1(x), r1(y)]); },
-  shot() {}, shotgun() {}, click() {}, reload() {}, pickup() {}, capture() {}, hit() {}, init() {}, toggle() { return true; },
+  shot() {}, shotgun() {}, sniper() {}, click() {}, reload() {}, pickup() {}, capture() {}, hit() {}, init() {}, toggle() { return true; },
 };
 function stampBody(art, s) { emit('a', ['body', r1(s.x), r1(s.y), r2(s.angle), s.team, r2(s.fallA ?? s.angle + Math.PI), r1(s.z || 0), r1(s.para || 0), s.cls.key]); }
 function stampScorch(art, x, y, r) { emit('a', ['scorch', r1(x), r1(y), r1(r)]); }

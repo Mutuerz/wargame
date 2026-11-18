@@ -20,6 +20,7 @@ const SFX = {
       this.loadClip('hitClip', 'sfx/bullet-hit.mp3');
       this.loadClip('sgShot', 'sfx/shotgun-shot.mp3');
       this.loadClip('sgPump', 'sfx/shotgun-pump.mp3');
+      this.loadClip('snShot', 'sfx/sniper-shot.mp3');
     } catch (e) { this.ctx = null; }
   },
   toggle() { this.on = !this.on; if (this.master) this.master.gain.value = this.on ? 0.45 : 0; return this.on; },
@@ -83,6 +84,13 @@ const SFX = {
     if (v < 0.02) return;
     this.clip(this.sgShot, v);
     if (this.sgPump) setTimeout(() => { if (this.ok() && (!pumpIf || pumpIf())) this.clip(this.sgPump, Math.min(1, v * 1.3)); }, 600);
+  },
+  // sniper rifle: the heavy shot clip (synth shot until it has loaded), heard further away than other guns
+  sniper(x, y, mine) {
+    if (!this.ok()) return;
+    if (!this.snShot) { this.shot(x, y, mine); return; }
+    const v = Math.min(1, this.vol(x, y) * (mine ? 0.6 : 0.95));
+    if (v > 0.02) this.clip(this.snShot, v);
   },
   // you hit someone: the bullet-impact clip at full volume (synth tick until it has loaded)
   hit() { if (!this.ok()) return; if (this.hitClip) this.clip(this.hitClip, 0.9); else this.tone(0.12, 2400, 1800, 0.03, 'square'); },
