@@ -16,7 +16,7 @@ const CFG = {
   HP: 100,
   VISION_NEAR: 90,            // always visible around each soldier (fog of war)
   SPAWN_SHIELD: 1.5,
-  REGEN_DELAY: 10,            // seconds without taking damage before self-heal starts
+  REGEN_DELAY: 5,             // seconds without taking damage before self-heal starts
   REGEN_TIME: 5,              // seconds to heal from 1 HP to full
   CAP_R: 170,                 // capture radius
   CAP_TIME: 30,               // seconds for one soldier to take a neutral sector (twice that from the enemy)
