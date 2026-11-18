@@ -38,6 +38,7 @@ window.addEventListener('keydown', e => {
   else if (e.code === 'KeyG') throwPressed = true;
   else if (e.code === 'KeyE' && G.player.riding) { if (G.online) NET.act({ a: 'dismount' }); else dismount(G.player.riding, G.player); }
   else if (e.code === 'Space' && G.player.alive && !e.repeat) jumpPressed = true;
+  else if (!G.player.alive && !G.player.riding && /^Digit[1-9]$/.test(e.code)) { const k = Object.keys(CLASSES)[+e.code.slice(5) - 1]; if (k) pickRespawnWeapon(k); }
   else if (!G.player.alive && (e.code === 'Space' || e.code === 'ArrowRight')) G.specIdx++;
   else if (!G.player.alive && e.code === 'ArrowLeft') G.specIdx--;
   else if (e.code === 'KeyM') { G.showMap = !G.showMap; G.mapForStrike = false; }
@@ -84,7 +85,8 @@ cv.addEventListener('mousedown', e => {
     if (!G.showMap) lockPointer();
     return;
   }
-  if (G && !G.over && !G.paused && !G.showMap && document.pointerLockElement !== cv && !lockFailed) { lockPointer(); if (G.player.alive) return; }
+  // While dead the mouse stays free for the respawn weapon buttons; the first click after respawning takes control again.
+  if (G && !G.over && !G.paused && !G.showMap && document.pointerLockElement !== cv && !lockFailed && G.player.alive) { lockPointer(); return; }
   if (G && !G.player.alive && !G.player.riding && !G.over) { G.specIdx += e.button === 2 ? -1 : 1; return; }
   if (e.button === 0) mouse.down = true; if (e.button === 2) mouse.right = true; });
 window.addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; if (e.button === 2) mouse.right = false; });
@@ -344,14 +346,17 @@ function renderPerks() {
   }
 }
 
+let deadDock = false;
 function updateRespawnDock() {
   const P = G && G.player;
-  if (!G || G.over || P.alive || G.auto) { $('respawn').hidden = true; return; }
+  if (!G || G.over || P.alive || G.auto) { $('respawn').hidden = true; deadDock = false; cv.classList.remove('dead'); return; }
   $('respawn').hidden = false;
+  // Just died: free the mouse so the weapon buttons can be clicked (no pause menu for this release).
+  if (!deadDock) { deadDock = true; unlockPointer(); cv.classList.add('dead'); }
   const t = P.team, tm = G.teams[t];
   let msg;
   const spec = spectateTarget();
-  const specTxt = spec && !P.riding ? ` Spectating ${spec.name}: click or Space to switch.` : '';
+  const specTxt = spec && !P.riding ? ` Spectating ${spec.name}: click or Space to switch. Number keys pick your weapon.` : '';
   if (P.riding) msg = `Riding the transport to sector ${P.riding.target.name} (${Math.ceil(P.riding.hp)} HP). Press E to jump out early.`;
   else {
     const held = G.m.points.filter(p => fullyHeld(p, t)).map(p => p.name);
@@ -368,7 +373,7 @@ function renderRespawnWeapons() {
     for (const k in CLASSES) {
       const b = document.createElement('button');
       b.dataset.k = k;
-      b.innerHTML = `<b>${CLASSES[k].name}</b><small>${WEAPON_BLURB[k].split(' · ').slice(1).join(' · ')}</small>`;
+      b.innerHTML = `<b>${Object.keys(CLASSES).indexOf(k) + 1} · ${CLASSES[k].name}</b><small>${WEAPON_BLURB[k].split(' · ').slice(1).join(' · ')}</small>`;
       b.onclick = () => pickRespawnWeapon(k);
       wrap.appendChild(b);
     }
