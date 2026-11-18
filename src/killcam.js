@@ -61,13 +61,14 @@ function kcUpdate(dt) {
   KC.wait -= dt;
   if (!KC.on && KC.clip && (!P.alive || P.para > 0) && (R3.death ? R3.death.t >= 2.2 : KC.wait <= 0)) KC.on = true;   // after the 2.2 s death fall
   if (!KC.on) return;
+  if (KC.intro > 0) { KC.intro -= dt; return; }   // best play: the name card holds the first frame
   KC.t += dt * (kcSlow() ? 0.35 : 1);   // slow motion around the killing shot (each kill, in a highlight)
   if (KC.t >= KC.t1 + 0.4) kcStop();
 }
 function kcSlow() { return KC.slowAt.some(t => KC.t > t - 0.5 && KC.t < t + 0.25); }
 function kcStop() {
   const hl = KC.hl;
-  KC.on = false; KC.clip = null; KC.killer = null; KC.hl = false;
+  KC.on = false; KC.clip = null; KC.killer = null; KC.hl = false; KC.intro = 0;
   if (hl && G && G.over) $('over').hidden = false;   // highlight over: back to the results
 }
 
@@ -126,6 +127,7 @@ function kcCamera() {
 // ---------- overlay
 function kcOverlay() {
   if (!KC.on || !KC.clip) return;
+  if (KC.hl && KC.intro > 0) { hlIntro(); return; }
   const D = '"Chakra Petch", sans-serif', bar = Math.round(VH * 0.07);
   ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(0, 0, VW, bar); ctx.fillRect(0, VH - bar, VW, bar);
   ctx.fillStyle = 'rgba(255,40,30,0.06)'; ctx.fillRect(0, bar, VW, VH - bar * 2);
@@ -143,7 +145,7 @@ function kcOverlay() {
 }
 
 window.addEventListener('keydown', e => {
-  if (KC.on && e.code === 'Space') { e.preventDefault(); e.stopImmediatePropagation(); kcStop(); }
+  if (KC.on && e.code === 'Space') { e.preventDefault(); e.stopImmediatePropagation(); if (KC.hl && SFX.bestStop) SFX.bestStop(); kcStop(); }
 }, true);
 
 // ---------- best play of the match: the biggest multi-kill anyone made (bots included, the first one wins a tie,
@@ -152,10 +154,10 @@ window.addEventListener('keydown', e => {
 // it beats the best so far, the frames around it are kept. Online the server tells every client about each
 // multi-kill ('mk' event), so everyone saves and replays the same moment from their own recording.
 const HL = { g: null, frames: [], acc: 0, pend: new Map(), best: null };
-const HL_LEN = 16, HL_PRE = 2, HL_POST = 1.6;
+const HL_LEN = 16, HL_PRE = 2, HL_POST = 1.6, HL_INTRO = 2.6;
 const HL_NAMES = ['', '', 'DOUBLE KILL', 'TRIPLE KILL', 'QUADRA KILL', 'PENTA KILL'];
 
-function hlReset() { HL.g = G; HL.frames = []; HL.acc = 0; HL.pend.clear(); HL.best = null; }
+function hlReset() { if (SFX.bestStop) SFX.bestStop(); HL.g = G; HL.frames = []; HL.acc = 0; HL.pend.clear(); HL.best = null; }
 // a soldier just made kill number n of a streak; ages = how long ago each kill of the streak was
 function hlNote(s, n, ages) {
   if (!G) return;
@@ -198,6 +200,7 @@ function hlOnOver() {
     $('rematch').parentNode.insertBefore(btn, $('rematch'));
   }
   btn.hidden = !HL.best;
+  if (!HL.best && SFX.bestPlay) SFX.bestPlay();   // no multi-kill this match: the end music plays over the results
   if (HL.best) { btn.textContent = `Watch ${HL_NAMES[HL.best.n].toLowerCase()} again`; if (hlPlay()) $('over').hidden = true; }
 }
 function hlPlay() {
@@ -208,6 +211,24 @@ function hlPlay() {
   KC.clip = b.clip; KC.killer = b.s; KC.slowAt = b.kills; KC.td = b.kills[b.kills.length - 1];
   KC.t0 = b.clip[0].t; KC.t1 = b.clip[b.clip.length - 1].t; KC.t = KC.t0;
   KC.label = `${b.name}${b.cls ? ' · ' + b.cls : ''} · ${TEAMS[b.team].name}`;
-  KC.hl = true; KC.on = true;
+  KC.hl = true; KC.on = true; KC.intro = HL_INTRO;
+  if (SFX.bestPlay) SFX.bestPlay();
   return true;
+}
+
+// the name card before the best play: who made it, with what, and how many. Slides in, holds, then the frame
+// behind it (the first frame of the replay) fades up as the card leaves.
+function hlIntro() {
+  const b = HL.best, D = '"Chakra Petch", sans-serif', u = HL_INTRO - KC.intro;   // 0 .. HL_INTRO
+  const inK = clamp(u / 0.45, 0, 1), outK = clamp(KC.intro / 0.5, 0, 1), e = 1 - (1 - inK) ** 3;
+  ctx.fillStyle = `rgba(6,8,7,${0.55 + 0.4 * outK})`; ctx.fillRect(0, 0, VW, VH);
+  const col = TEAMS[b.team].color, cy = VH / 2, slide = (1 - e) * -VW * 0.25 + (1 - outK) * VW * 0.15;
+  ctx.save(); ctx.globalAlpha = Math.min(e, outK);
+  ctx.fillStyle = col; ctx.fillRect(VW / 2 - 260 + slide, cy - 70, 6, 140);
+  txt('BEST PLAY OF THE MATCH', VW / 2 - 236 + slide, cy - 50, `700 15px ${D}`, '#ffd27a', 'left', 'middle');
+  txt(b.name.toUpperCase(), VW / 2 - 236 + slide, cy - 8, `800 46px ${D}`, '#ffffff', 'left', 'middle');
+  txt(`${TEAMS[b.team].name}${b.cls ? ' · ' + b.cls : ''}`, VW / 2 - 236 + slide, cy + 30, `600 17px ${D}`, col, 'left', 'middle');
+  txt(HL_NAMES[Math.min(b.n, 5)], VW / 2 - 236 + slide * 1.4, cy + 62, `800 22px ${D}`, '#ff5a4e', 'left', 'middle');
+  ctx.restore();
+  txt('Space to skip', VW - 24, VH - 24, `500 13px "IBM Plex Mono", monospace`, '#b8c0b4', 'right', 'middle');
 }

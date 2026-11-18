@@ -26,6 +26,7 @@ const SFX = {
       this.loadClip('f30Clip', 'sfx/final30.mp3');
       this.loadClip('hurtClip', 'sfx/hurt.mp3');
       this.loadClip('ammoClip', 'sfx/ammo-pickup.mp3');
+      this.loadClip('bestClip', 'sfx/best-play.mp3');
     } catch (e) { this.ctx = null; }
   },
   toggle() { this.on = !this.on; if (this.master) this.master.gain.value = this.on ? 0.45 : 0; return this.on; },
@@ -75,6 +76,19 @@ const SFX = {
   // decoded once into a buffer so it plays instantly, as often as needed
   loadClip(key, url) {
     fetch(url).then(r => (r.ok ? r.arrayBuffer() : null)).then(b => b && this.ctx.decodeAudioData(b)).then(buf => { if (buf) this[key] = buf; }).catch(() => {});
+  },
+  // end-of-match music under the best-play replay; stops if the replay is skipped
+  bestPlay() {
+    this.bestStop();
+    if (!this.ok() || !this.bestClip) return;
+    const c = this.ctx, src = c.createBufferSource(), g = c.createGain();
+    src.buffer = this.bestClip; g.gain.value = 0.9; src.connect(g); g.connect(this.master); src.start();
+    this.bestSrc = { src, g };
+  },
+  bestStop() {
+    const b = this.bestSrc; this.bestSrc = null;
+    if (!b) return;
+    const t = this.ctx.currentTime; b.g.gain.setValueAtTime(b.g.gain.value, t); b.g.gain.linearRampToValueAtTime(0, t + 0.4); b.src.stop(t + 0.45);
   },
   clip(buf, v) {
     const c = this.ctx, src = c.createBufferSource(), g = c.createGain();
