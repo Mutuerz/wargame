@@ -417,46 +417,94 @@ stampRubble = function (art, o) { if (art) _stampRubble(art, o); r3RemoveSolid(o
 stampCasing = function () {};
 
 // ---------- soldiers
+// Low-poly but detailed: boots, knee pads, plate carrier with pouches, backpack with a bedroll, gloves,
+// a helmet with brim, cover band and goggles, and weapons with magazine, sights and stock.
 const SOLDIER_GEO = {
-  leg: new THREE.BoxGeometry(5.5, 16, 5.5).translate(0, -8, 0),
-  torso: new THREE.BoxGeometry(9, 13, 14).translate(0, 6.5, 0),
-  pack: new THREE.BoxGeometry(5, 9, 10),
-  head: new THREE.SphereGeometry(4.6, 10, 8),
-  helmet: new THREE.SphereGeometry(5.6, 10, 6, 0, TAU, 0, Math.PI / 2),
-  arm: new THREE.BoxGeometry(14, 4, 4).translate(7, 0, 0),
+  thigh: new THREE.BoxGeometry(6, 9, 6).translate(0, -4.5, 0),
+  shin: new THREE.BoxGeometry(5.2, 8, 5.2).translate(0, -12, 0),
+  knee: new THREE.BoxGeometry(2, 3.2, 4.6).translate(3.2, -8.6, 0),
+  boot: new THREE.BoxGeometry(8.5, 3.2, 5.8).translate(1.4, -15.6, 0),
+  hips: new THREE.BoxGeometry(8.5, 4, 13).translate(0, 2, 0),
+  torso: new THREE.BoxGeometry(8.4, 11, 13.2).translate(0, 8.5, 0),
+  vest: new THREE.BoxGeometry(9.8, 8.5, 12).translate(0, 8.8, 0),
+  pouch: new THREE.BoxGeometry(2.2, 3.4, 2.8),
+  collar: new THREE.CylinderGeometry(3.2, 3.6, 2, 10),
+  pack: new THREE.BoxGeometry(4.5, 9, 9.5),
+  roll: new THREE.CylinderGeometry(2, 2, 10, 8).rotateX(Math.PI / 2),
+  head: new THREE.SphereGeometry(4.3, 14, 10),
+  nose: new THREE.BoxGeometry(1.2, 1.4, 1.1),
+  helmet: new THREE.SphereGeometry(5.3, 14, 7, 0, TAU, 0, Math.PI / 2),
+  brim: new THREE.CylinderGeometry(5.9, 6.1, 0.9, 16),
+  goggles: new THREE.TorusGeometry(5.35, 0.75, 6, 18, Math.PI * 0.9),
+  upper: new THREE.BoxGeometry(7, 4, 4).translate(3.5, 0, 0),
+  fore: new THREE.BoxGeometry(8, 3.4, 3.4).translate(10.5, 0, 0),
+  glove: new THREE.BoxGeometry(3, 3.6, 3.6).translate(16, 0, 0),
 };
-const GUN_GEO = {
-  rifleman: [[26, 3.5, 3, 12], [8, 7, 3, 4]],
-  sniper: [[36, 3, 3, 16], [10, 4, 4, 8, 4]],
-  smg: [[18, 4, 3.5, 8], [5, 8, 3, 5]],
-  lmg: [[30, 5, 4.5, 13], [10, 7, 7, 6, -3]],
+const GUN_SPEC = {   // length, height, barrel length, magazine height, stock length
+  rifleman: { L: 22, H: 3.6, B: 9, mag: 6, stock: 8 },
+  sniper: { L: 28, H: 3.2, B: 15, mag: 3.5, stock: 10, scope: true },
+  smg: { L: 15, H: 3.8, B: 4, mag: 8, stock: 5 },
+  lmg: { L: 25, H: 4.6, B: 11, mag: 0, stock: 9, box: true, bipod: true },
 };
 function gunMesh(clsKey, material) {
-  const g = new THREE.Group(), spec = GUN_GEO[clsKey] || GUN_GEO.rifleman;
-  const body = new THREE.Mesh(new THREE.BoxGeometry(spec[0][0], spec[0][1], spec[0][2]).translate(spec[0][3], 0, 0), material);
-  const part = new THREE.Mesh(new THREE.BoxGeometry(spec[1][0], spec[1][1], spec[1][2]).translate(spec[1][3], spec[1][4] ? spec[1][4] : -spec[1][1] / 2, 0), material);
-  g.add(body, part);
+  const g = new THREE.Group(), sp = GUN_SPEC[clsKey] || GUN_SPEC.rifleman;
+  const metal = lam('#3e423f'), wood = clsKey === 'sniper' ? lam('#5a4330') : material;
+  const add = (geo, m, x, y, z, rz = 0) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.rotation.z = rz; g.add(o); return o; };
+  add(new THREE.BoxGeometry(sp.L, sp.H, 3), material, sp.L / 2 - 2, 0, 0);                                 // receiver
+  add(new THREE.CylinderGeometry(0.75, 0.75, sp.B, 8).rotateZ(Math.PI / 2), metal, sp.L - 2 + sp.B / 2, 0.6, 0); // barrel
+  add(new THREE.BoxGeometry(sp.stock, sp.H * 1.15, 2.6), wood, -sp.stock / 2 - 1.5, -0.7, 0);              // stock
+  add(new THREE.BoxGeometry(2, 4.2, 2.4), material, 3, -3.2, 0, -0.35);                                     // grip
+  if (sp.mag) add(new THREE.BoxGeometry(2.6, sp.mag, 2.2), metal, 9, -sp.H / 2 - sp.mag / 2 + 0.6, 0, 0.18); // magazine
+  add(new THREE.BoxGeometry(1.2, 1.6, 1), metal, sp.L - 3, sp.H / 2 + 0.8, 0);                              // front sight
+  if (sp.scope) {
+    add(new THREE.CylinderGeometry(1.4, 1.4, 11, 10).rotateZ(Math.PI / 2), metal, 10, sp.H / 2 + 2.4, 0);
+    add(new THREE.CylinderGeometry(1.8, 1.8, 2, 10).rotateZ(Math.PI / 2), metal, 16, sp.H / 2 + 2.4, 0);
+  } else add(new THREE.BoxGeometry(3, 1.6, 1.6), metal, 6, sp.H / 2 + 0.8, 0);                              // rear sight
+  if (sp.box) add(new THREE.BoxGeometry(5, 5, 4.4), lam('#4b5a3a'), 8, -4.4, 1.2);                         // ammo box
+  if (sp.bipod) { add(new THREE.BoxGeometry(0.7, 7, 0.7), metal, sp.L - 4, -3.5, -1.2, 0.5); add(new THREE.BoxGeometry(0.7, 7, 0.7), metal, sp.L - 4, -3.5, 1.2, 0.5); }
   g.traverse(n => { if (n.isMesh) n.castShadow = true; });
   return g;
 }
+const SHARED_GEO = new Set(Object.values(SOLDIER_GEO));
+function disposeModel(g) {
+  g.traverse(n => {
+    if (n.geometry && !SHARED_GEO.has(n.geometry)) n.geometry.dispose();
+    if (n.material) n.material.dispose();
+  });
+}
 function makeSoldierModel(team, clsKey) {
   const T = TEAMS[team];
-  const uni = lam(shade(T.color, 0.55)), dark = lam(shade(T.dark, 0.9)), helm = lam(T.helmet), skin = lam('#c99b7a'), gunM = lam('#232624');
+  const uni = lam(shade(T.color, 0.5)), dark = lam(shade(T.dark, 0.85)), vestM = lam(shade(T.dark, 0.6)), helm = lam(T.helmet);
+  const skin = lam('#c99b7a'), boots = lam('#2a2622'), glove = lam('#3a3631'), strap = lam('#2f3329'), gunM = lam('#232624');
+  const pouchM = lam(shade(T.helmet, 0.9)), glass = lam('#20262a', { emissive: '#0d1418' });
   const g = new THREE.Group(), body = new THREE.Group();
   g.add(body);
-  const legL = new THREE.Mesh(SOLDIER_GEO.leg, dark), legR = new THREE.Mesh(SOLDIER_GEO.leg, dark);
-  legL.position.set(0, 16, -3.5); legR.position.set(0, 16, 3.5);
+  const leg = z => {
+    const L = new THREE.Group(); L.position.set(0, 16, z);
+    L.add(new THREE.Mesh(SOLDIER_GEO.thigh, dark), new THREE.Mesh(SOLDIER_GEO.shin, dark), new THREE.Mesh(SOLDIER_GEO.knee, strap), new THREE.Mesh(SOLDIER_GEO.boot, boots));
+    return L;
+  };
+  const legL = leg(-3.4), legR = leg(3.4);
+  const hips = new THREE.Mesh(SOLDIER_GEO.hips, dark); hips.position.y = 14;
   const torso = new THREE.Mesh(SOLDIER_GEO.torso, uni); torso.position.y = 16;
-  const pack = new THREE.Mesh(SOLDIER_GEO.pack, dark); pack.position.set(-6.5, 24, 0);
-  const head = new THREE.Mesh(SOLDIER_GEO.head, skin); head.position.y = 32;
-  const helmet = new THREE.Mesh(SOLDIER_GEO.helmet, helm); helmet.position.y = 32.5;
-  const band = new THREE.Mesh(new THREE.BoxGeometry(9.6, 2, 14.4), lam(T.color, { emissive: shade(T.color, 0.35) })); band.position.y = 24;
-  const arms = new THREE.Group(); arms.position.set(1, 27, 0);
-  const armL = new THREE.Mesh(SOLDIER_GEO.arm, uni), armR = new THREE.Mesh(SOLDIER_GEO.arm, uni);
-  armL.position.z = -5; armR.position.z = 5; armL.rotation.y = 0.35; armR.rotation.y = -0.25;
-  const gun = gunMesh(clsKey, gunM); gun.position.set(6, -1, 2);
+  const vest = new THREE.Mesh(SOLDIER_GEO.vest, vestM); vest.position.y = 16;
+  for (let i = 0; i < 3; i++) { const p = new THREE.Mesh(SOLDIER_GEO.pouch, pouchM); p.position.set(5.6, 21.2, -3.6 + i * 3.6); body.add(p); }
+  const collar = new THREE.Mesh(SOLDIER_GEO.collar, uni); collar.position.y = 28;
+  const pack = new THREE.Mesh(SOLDIER_GEO.pack, pouchM); pack.position.set(-6.8, 24, 0);
+  const roll = new THREE.Mesh(SOLDIER_GEO.roll, lam('#5d5a48')); roll.position.set(-7, 30, 0);
+  const head = new THREE.Mesh(SOLDIER_GEO.head, skin); head.position.y = 32.4;
+  const nose = new THREE.Mesh(SOLDIER_GEO.nose, skin); nose.position.set(4.3, 32.2, 0);
+  const helmet = new THREE.Mesh(SOLDIER_GEO.helmet, helm); helmet.position.y = 33.2;
+  const brim = new THREE.Mesh(SOLDIER_GEO.brim, helm); brim.position.y = 33.3;
+  const goggles = new THREE.Mesh(SOLDIER_GEO.goggles, glass); goggles.position.y = 35.2; goggles.rotation.set(Math.PI / 2, 0, Math.PI * 0.55);
+  const band = new THREE.Mesh(new THREE.BoxGeometry(4.6, 2, 4.6), lam(T.color, { emissive: shade(T.color, 0.35) })); band.position.set(0, 24.5, 6.9);   // armband
+  const band2 = band.clone(); band2.position.z = -6.9;
+  const arms = new THREE.Group(); arms.position.set(1, 26.5, 0);
+  const arm = (z, ry) => { const a = new THREE.Group(); a.position.z = z; a.rotation.y = ry; a.add(new THREE.Mesh(SOLDIER_GEO.upper, uni), new THREE.Mesh(SOLDIER_GEO.fore, uni), new THREE.Mesh(SOLDIER_GEO.glove, glove)); return a; };
+  const armL = arm(-5.4, 0.42), armR = arm(5.4, -0.2);
+  const gun = gunMesh(clsKey, gunM); gun.position.set(7, -1, 1.6);
   arms.add(armL, armR, gun);
-  body.add(legL, legR, torso, pack, head, helmet, band, arms);
+  body.add(legL, legR, hips, torso, vest, collar, pack, roll, head, nose, helmet, brim, goggles, band, band2, arms);
   // parachute canopy and lines, shown while dropping in
   const chute = new THREE.Group();
   const canopy = new THREE.Mesh(new THREE.SphereGeometry(34, 14, 6, 0, TAU, 0, Math.PI / 2.4), lam(shade(T.color, 0.75), { side: THREE.DoubleSide }));
@@ -472,7 +520,7 @@ function makeSoldierModel(team, clsKey) {
 function soldierObj(s) {
   let o = R3.soldiers.get(s.id);
   const ck = s.cls.key;
-  if (o && (o.cls !== ck || o.team !== s.team)) { scene3.remove(o.g); o = null; }
+  if (o && (o.cls !== ck || o.team !== s.team)) { scene3.remove(o.g); disposeModel(o.g); o = null; }
   if (!o) {
     o = { g: makeSoldierModel(s.team, ck), cls: ck, team: s.team, mark: null };
     scene3.add(o.g);
@@ -496,7 +544,7 @@ function addBody(x, y, angle, team, z, fallA, cls, air) {
   const knock = kind === 'back' ? rand(14, 26) : kind === 'fwd' ? rand(4, 10) : rand(8, 16);
   R3.bodies.push({ g, t: 0, kind, x, y, ground, air: air || 0, kx: Math.cos(fallA) * knock, ky: Math.sin(fallA) * knock,
     dur: kind === 'fwd' ? 0.95 : 0.7, side: Math.random() < 0.5 ? 1 : -1, armA: rand(-1.4, -0.6) });
-  if (R3.bodies.length > 26) { const b = R3.bodies.shift(); scene3.remove(b.g); }
+  if (R3.bodies.length > 18) { const b = R3.bodies.shift(); scene3.remove(b.g); disposeModel(b.g); }
 }
 function animateBody(b, dt) {
   b.t += dt;
@@ -904,6 +952,7 @@ function render3d(dt) {
     o.lx = s.x; o.ly = s.y;
     const sw = moving && !(s.para > 0) ? Math.sin(s.walkPhase) * 0.6 : 0;
     if (s.crouch) { u.body.position.y = -10; u.legL.rotation.z = 1.35; u.legR.rotation.z = -0.25; }   // kneeling
+    else if ((s.jz || 0) > 2 && !(s.para > 0)) { u.body.position.y = 0; u.legL.rotation.z = 0.9; u.legR.rotation.z = 0.3; }   // jumping / vaulting: legs tucked
     else { u.body.position.y = 0; u.legL.rotation.z = sw; u.legR.rotation.z = -sw; }
     u.chute.visible = s.para > 0;
     u.arms.rotation.z = (s.pitch || 0) + (s.reloading ? -0.6 : 0);

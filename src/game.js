@@ -90,7 +90,8 @@ function spawnSoldier(s, choice) {
   s.x = p.x; s.y = p.y; s.z = 0; s.vx = s.vy = 0; s.pitch = 0;
   Perks.reapply(G, s);
   s.hp = maxHp(s); s.alive = true; s.shield = CFG.SPAWN_SHIELD;
-  refillAmmo(s); s.fireCD = 0; s.heat = 0; s.scoped = false; s.steady = true; s.steadyT = 0; s.crouch = false; s.para = 0;
+  refillAmmo(s); s.fireCD = 0; s.heat = 0; s.scoped = false; s.steady = true; s.steadyT = 0; s.crouch = false; s.para = 0; s.jz = 0; s.jv = 0; s.vault = null;
+  if (s.nextCls) { s.cls = s.nextCls; s.nextCls = null; refillAmmo(s); }
   s.nades = Math.random() < CFG.GRENADE_CHANCE ? 1 : 0;
   s.act = null; s.actT = 0;
   s.angle = s.team === 0 ? 0 : Math.PI;
@@ -139,7 +140,7 @@ function shoot(s, moving) {
 }
 
 // Heights in the world: the floor a soldier stands on, and their eyes.
-function feetZ(s) { return elevAt(G.m, s.x, s.y) + (s.z || 0) + (s.para || 0); }
+function feetZ(s) { return elevAt(G.m, s.x, s.y) + (s.z || 0) + (s.para || 0) + (s.jz || 0); }
 function eyeZ(s) { return feetZ(s) + (s.crouch ? CFG.CROUCH_EYE : CFG.EYE); }
 function bodyH(s) { return s.crouch ? CFG.CROUCH_BODY : CFG.BODY_H; }
 function headH(s) { return s.crouch ? CFG.CROUCH_HEAD : CFG.HEAD_H; }
@@ -161,6 +162,53 @@ function updateFloor(m, s, px, py) {
   }
   s.z = (s.z || 0) >= FH / 2 ? FH : 0;
 }
+// ---------- jumping and vaulting (Space)
+function circleFree(m, x, y, z) { const t = { x, y }; collideCircle(m, t, CFG.R - 1, z); return Math.abs(t.x - x) + Math.abs(t.y - y) < 0.5; }
+// Low, thin cover (sandbags, crates, logs, barriers, low walls) or a window right in front: vault over / through it.
+function findVault(m, s, a) {
+  const cx = Math.cos(a), cy = Math.sin(a), fz = feetZ(s) + 8;
+  let hit = null, d1 = 0;
+  for (let d = CFG.R - 2; d <= CFG.R + 26; d += 2) {
+    const o = blockedAt(m, s.x + cx * d, s.y + cy * d, fz);
+    if (o && o !== 'ground') { hit = o; d1 = d; break; }
+  }
+  if (!hit || hit.water) return null;
+  const top = hit.gz + hit.z1 - feetZ(s);
+  if (!hit.window && (top > CFG.VAULT_H || (hit.breakable && !hit.window))) return null;
+  // how thick is it along this direction?
+  let d2 = -1;
+  for (let d = d1 + 2; d <= d1 + CFG.VAULT_T + 2; d += 2) {
+    const o = blockedAt(m, s.x + cx * d, s.y + cy * d, fz);
+    if (!o || o === 'ground') { d2 = d; break; }
+  }
+  if (d2 < 0) return null;
+  const land = d2 + CFG.R + 3, x1 = s.x + cx * land, y1 = s.y + cy * land;
+  if (x1 < 20 || y1 < 20 || x1 > W - 20 || y1 > H - 20) return null;
+  if (!circleFree(m, x1, y1, s.z || 0)) return null;
+  if (Math.abs(elevAt(m, x1, y1) - elevAt(m, s.x, s.y)) > 40) return null;
+  return { x0: s.x, y0: s.y, x1, y1, t: 0, dur: CFG.VAULT_TIME, h: (hit.window ? WIN_LO : Math.max(10, top)) + 6 };
+}
+function tryJump(m, s, a) {
+  if (s.vault || s.jz > 0 || s.para > 0 || s.crouch) return;
+  const v = findVault(m, s, a);
+  if (v) s.vault = v; else s.jv = CFG.JUMP_V;
+}
+function vaultStep(m, s, dt) {
+  const v = s.vault; v.t += dt;
+  const f = Math.min(1, v.t / v.dur);
+  s.x = lerp(v.x0, v.x1, f); s.y = lerp(v.y0, v.y1, f); s.jz = Math.sin(Math.PI * f) * v.h; s.vx = s.vy = 0;
+  if (f >= 1) {
+    s.vault = null; s.jz = 0;
+    const z0 = s.z || 0; updateFloor(m, s);
+    if (s.z < z0) { s.jz = z0 - s.z; s.jv = 0; }   // out of an upper-floor window: fall to the ground
+  }
+}
+function airStep(s, dt) {
+  if (!(s.jz > 0 || s.jv > 0)) return;
+  s.jv -= CFG.GRAV * dt; s.jz += s.jv * dt;
+  if (s.jz <= 0) { s.jz = 0; s.jv = 0; }
+}
+
 // Terrain: shooting downhill tightens spread, uphill widens it.
 function slopeFactor(s) {
   const d = (feetZ(s) - elevAt(G.m, s.aimX, s.aimY)) / CFG.LEVEL_H;
@@ -255,11 +303,14 @@ function updateSoldier(s, dt, ctl) {
   if (fire) speed *= 0.8;
   if (s.ads) speed *= CFG.ADS_SPEED;
   if (s.para > 0) speed = CFG.WALK * 0.6;   // steering the parachute
+  if (ctl.jump && !s.vault) tryJump(m, s, moving ? Math.atan2(mvy, mvx) : s.angle);
+  if (s.vault) { vaultStep(m, s, dt); s.fireCD -= dt; return; }   // no shooting mid-vault
   const k = 1 - Math.exp(-dt * 14);
   s.vx = lerp(s.vx, mvx * speed, k); s.vy = lerp(s.vy, mvy * speed, k);
   const ox = s.x, oy = s.y;
   s.x += s.vx * dt; s.y += s.vy * dt;
-  collideCircle(m, s, CFG.R);
+  collideCircle(m, s, CFG.R, (s.z || 0) + (s.jz || 0));
+  airStep(s, dt);
   if (s.para > 0) { s.para = Math.max(0, s.para - CFG.PARA_FALL * dt); s.z = 0; }
   else updateFloor(m, s, ox, oy);
   if (moving && !(s.para > 0)) s.walkPhase += dt * speed * 0.12;

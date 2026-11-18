@@ -80,6 +80,9 @@ const CFG = {
   STREAK_T: 8,                // kills within this many seconds of each other chain into multi-kills
   PARA_INTERVAL: 30,          // the only respawn: every 30 s up to PARA_N dead soldiers parachute over a held sector
   PARA_N: 5,
+  JUMP_V: 210, GRAV: 980,     // Space: jump about 1.1 m
+  VAULT_H: 44, VAULT_T: 48,   // Space next to cover at most this tall and this thick (px) vaults over it; windows too
+  VAULT_TIME: 0.5,
   PARA_H: 400,                // drop height (20 m)
   PARA_FALL: 75,              // descent speed (px/s)
 };

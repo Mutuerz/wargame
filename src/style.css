@@ -138,7 +138,11 @@ input {
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 .dock-card { display: flex; flex-direction: column; gap: 10px; align-items: center; padding: 14px 18px; }
 #respawnText { font: 600 16px var(--display); }
+#respawnOpts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+#respawnOpts button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; text-align: left; }
+#respawnOpts button small { color: var(--dim); font-size: 11px; }
 #respawnOpts button.on { border-color: var(--blue); background: #12263b; }
+@media (max-width: 640px) { #respawnOpts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* Perks */
 .perk-card { width: min(720px, 100%); display: flex; flex-direction: column; gap: 16px; }

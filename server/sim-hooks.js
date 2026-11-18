@@ -62,9 +62,9 @@ spawnSoldier = function (s, choice) {
 // Humans are driven by their latest network input instead of the keyboard.
 function playerControl(s) {
   const h = s.human;
-  let inp = h.queue.shift();
+  let inp = h.queue.shift(); const fresh = !!inp;
   if (inp) { h.ack = inp.seq; h.last = inp; } else inp = h.last;
-  const ctl = inp ? { mx: inp.mx, my: inp.my, fire: inp.fire, sprint: inp.sprint, interact: inp.interact, scope: inp.scope, crouch: inp.crouch, aimX: inp.ax, aimY: inp.ay, pitch: inp.pitch }
+  const ctl = inp ? { jump: fresh && inp.jump, mx: inp.mx, my: inp.my, fire: inp.fire, sprint: inp.sprint, interact: inp.interact, scope: inp.scope, crouch: inp.crouch, aimX: inp.ax, aimY: inp.ay, pitch: inp.pitch }
     : { mx: 0, my: 0, aimX: s.x + Math.cos(s.angle) * 100, aimY: s.y + Math.sin(s.angle) * 100 };
   if (inp) s.angle = Math.atan2(inp.ay - s.y, inp.ax - s.x);
   if (ctl.scope && s.cls.scopeRange) { ctl.mx = 0; ctl.my = 0; }
@@ -125,9 +125,11 @@ const SIM = {
       bots.slice(n).forEach(benchSoldier);
     }
   },
+  // Weapon for the next life (applied on respawn); before the first spawn it applies right away.
   setClass(id, cls) {
-    const s = this.get(id); if (!s || !CLASSES[cls] || s.cls === CLASSES[cls]) return;
-    s.cls = CLASSES[cls];
+    const s = this.get(id); if (!s || !CLASSES[cls]) return;
+    if (s.alive && G.time > 0.5) { s.nextCls = CLASSES[cls] === s.cls ? null : CLASSES[cls]; return; }
+    s.cls = CLASSES[cls]; s.nextCls = null;
     if (s.alive) refillAmmo(s);
   },
   get(id) { return G.soldiers.find(s => s.id === id); },
@@ -136,7 +138,7 @@ const SIM = {
     const n = v => (typeof v === 'number' && isFinite(v) ? v : 0);
     const f = n(a[4]) | 0;
     const q = s.human.queue;
-    q.push({ seq: n(a[1]), mx: clamp(n(a[2]), -1, 1), my: clamp(n(a[3]), -1, 1), fire: !!(f & 1), sprint: !!(f & 2), interact: !!(f & 4), scope: !!(f & 8), crouch: !!(f & 16),
+    q.push({ seq: n(a[1]), mx: clamp(n(a[2]), -1, 1), my: clamp(n(a[3]), -1, 1), fire: !!(f & 1), sprint: !!(f & 2), interact: !!(f & 4), scope: !!(f & 8), crouch: !!(f & 16), jump: !!(f & 32),
       ax: clamp(n(a[5]), -500, W + 500), ay: clamp(n(a[6]), -500, H + 500), pitch: clamp(n(a[7]) / 1000, -1.4, 1.4) });
     if (q.length > 8) q.splice(0, q.length - 8);
   },
@@ -168,7 +170,7 @@ const SIM = {
       if (s.c4 > 0 && s.bot && s.bot.role === 'sapper') f |= 8; if (s.act) f |= 16;
       if (s.team !== T && G.time - s.spotted[T] < 1.6) f |= 32;
       if (s.crouch) f |= 64;
-      sol.push([s.id, r1(s.x), r1(s.y), r2(s.angle), Math.ceil(s.hp), f, s.reloading ? r2(1 - s.reloadT / s.reloadMax) : 0, s.act ? r2(s.actT / CFG.C4_PLANT) : 0, r1(s.z), r2(s.pitch), r1(s.para || 0)]);
+      sol.push([s.id, r1(s.x), r1(s.y), r2(s.angle), Math.ceil(s.hp), f, s.reloading ? r2(1 - s.reloadT / s.reloadMax) : 0, s.act ? r2(s.actT / CFG.C4_PLANT) : 0, r1(s.z), r2(s.pitch), r1(s.para || 0), r1(s.jz || 0)]);
     }
     return {
       time: r2(G.time),
@@ -190,7 +192,8 @@ const SIM = {
     return { id: s.id, alive: s.alive, hp: Math.ceil(s.hp), mag: s.mag, mags: s.mags.slice(), nades: s.nades, c4: s.c4,
       rl: s.reloading ? 1 : 0, rlT: r2(s.reloadT), rlM: r2(s.reloadMax), act: s.act, actT: r2(s.actT), pts: s.points,
       ride: s.riding ? nid(s.riding) : 0, x: r1(s.x), y: r1(s.y), z: r1(s.z), vx: r1(s.vx), vy: r1(s.vy), cls: s.cls.key,
-      ack: s.human ? s.human.ack : 0, sh: r2(Math.max(0, s.shield)), sc: s.scoped ? 1 : 0, team: s.team, pa: r1(s.para || 0), st: s.steady ? 1 : 0, cr: s.crouch ? 1 : 0 };
+      ack: s.human ? s.human.ack : 0, sh: r2(Math.max(0, s.shield)), sc: s.scoped ? 1 : 0, team: s.team, pa: r1(s.para || 0), st: s.steady ? 1 : 0, cr: s.crouch ? 1 : 0,
+      jz: r2(s.jz || 0), jv: r1(s.jv || 0), vt: s.vault ? [r1(s.vault.x0), r1(s.vault.y0), r1(s.vault.x1), r1(s.vault.y1), r2(s.vault.t), s.vault.dur, r1(s.vault.h)] : 0 };
   },
   takeEvents() { const e = NET.ev; NET.ev = []; return e; },
   result() {

@@ -197,13 +197,14 @@ const NET = {
     if (P.reloading && !this.wasReloading) SFX.reload();
     this.wasReloading = P.reloading;
     P.riding = me.ride ? this.cartObj(me.ride) : null;
-    if (me.alive && !this.lastAlive) { this.pending = []; this.pred = null; }
+    if (me.alive && !this.lastAlive) { this.pending = []; this.pred = null; P.nextCls = null; }
     this.lastAlive = me.alive;
     P.alive = me.alive;
     if (!me.alive) { this.pending = []; this.pred = null; if (P.riding) { P.x = P.riding.x; P.y = P.riding.y; } return; }
     const shownX = this.pred ? this.pred.x + this.off.x : me.x, shownY = this.pred ? this.pred.y + this.off.y : me.y;
     const pr = this.pred || (this.pred = { x: me.x, y: me.y, z: 0, vx: 0, vy: 0, walkPhase: 0 });
-    pr.x = me.x; pr.y = me.y; pr.z = me.z || 0; pr.vx = me.vx; pr.vy = me.vy; pr.para = me.pa || 0;
+    pr.x = me.x; pr.y = me.y; pr.z = me.z || 0; pr.vx = me.vx; pr.vy = me.vy; pr.para = me.pa || 0; pr.jz = me.jz || 0; pr.jv = me.jv || 0;
+    pr.vault = me.vt ? { x0: me.vt[0], y0: me.vt[1], x1: me.vt[2], y1: me.vt[3], t: me.vt[4], dur: me.vt[5], h: me.vt[6] } : null;
     pr.reloading = P.reloading; pr.cls = P.cls; pr.mods = P.mods;
     this.pending = this.pending.filter(i => i.seq > me.ack);
     for (const i of this.pending) netMove(pr, i, NET_STEP);
@@ -291,7 +292,7 @@ const NET = {
       const k = Math.exp(-dt * 10); this.off.x *= k; this.off.y *= k;
       const nx = this.pred.x + this.off.x, ny = this.pred.y + this.off.y;
       P.walkPhase += Math.hypot(nx - P.x, ny - P.y) * 0.12;
-      P.x = nx; P.y = ny; P.z = this.pred.z; P.para = this.pred.para || 0; P.vx = this.pred.vx; P.vy = this.pred.vy;
+      P.x = nx; P.y = ny; P.z = this.pred.z; P.para = this.pred.para || 0; P.jz = this.pred.jz || 0; P.vault = this.pred.vault; P.vx = this.pred.vx; P.vy = this.pred.vy;
     }
     netUpdateBullets(dt);
     updateParticles(dt);
@@ -310,8 +311,8 @@ const NET = {
     if (!P.alive || G.over) { reloadPressed = false; throwPressed = false; return; }
     const ctl = playerControl(P);
     P.aimX = ctl.aimX; P.aimY = ctl.aimY;
-    const flags = (ctl.fire ? 1 : 0) | (ctl.sprint ? 2 : 0) | (ctl.interact ? 4 : 0) | (ctl.scope ? 8 : 0) | (ctl.crouch ? 16 : 0);
-    const inp = { seq: ++this.seq, mx: ctl.mx, my: ctl.my, fire: !!ctl.fire, sprint: !!ctl.sprint, ads: !!(ctl.scope && !P.cls.scopeRange), crouch: !!ctl.crouch };
+    const flags = (ctl.fire ? 1 : 0) | (ctl.sprint ? 2 : 0) | (ctl.interact ? 4 : 0) | (ctl.scope ? 8 : 0) | (ctl.crouch ? 16 : 0) | (ctl.jump ? 32 : 0);
+    const inp = { seq: ++this.seq, mx: ctl.mx, my: ctl.my, fire: !!ctl.fire, sprint: !!ctl.sprint, ads: !!(ctl.scope && !P.cls.scopeRange), crouch: !!ctl.crouch, jump: !!ctl.jump, angle: P.angle };
     if (ctl.fire && P.mag > 0 && !P.reloading) { P.steady = false; this.shotAt = performance.now(); }
     this.send({ t: 'i', d: [0, inp.seq, ctl.mx, ctl.my, flags, Math.round(ctl.aimX), Math.round(ctl.aimY), Math.round(ctl.pitch * 1000)] });
     if (ctl.reload) this.act({ a: 'reload' });
@@ -342,7 +343,7 @@ const NET = {
       const na = A.solMap.get(s.id) || nb;
       const x = L(na[1], nb[1]), y = L(na[2], nb[2]);
       if (s.alive && s.x > -9000) s.walkPhase += Math.hypot(x - s.x, y - s.y) * 0.12;
-      s.alive = true; s.x = x; s.y = y; s.z = L(na[8] || 0, nb[8] || 0); s.pitch = nb[9] || 0; s.para = L(na[10] || 0, nb[10] || 0); s.angle = LA(na[3], nb[3]);
+      s.alive = true; s.x = x; s.y = y; s.z = L(na[8] || 0, nb[8] || 0); s.pitch = nb[9] || 0; s.para = L(na[10] || 0, nb[10] || 0); s.jz = L(na[11] || 0, nb[11] || 0); s.angle = LA(na[3], nb[3]);
       s.hp = nb[4];
       const fl = nb[5];
       s.reloading = !!(fl & 1); s.scoped = !!(fl & 2); s.crouch = !!(fl & 64); s.shield = fl & 4 ? 1 : 0;
@@ -392,11 +393,15 @@ function netMove(s, inp, dt) {
   if (inp.fire) speed *= 0.8;
   if (inp.ads && !s.reloading) speed *= CFG.ADS_SPEED;
   if (falling) speed = CFG.WALK * 0.6;
+  s.crouch = !!(inp.crouch && !falling);
+  if (inp.jump && !s.vault) tryJump(G.m, s, moving ? Math.atan2(mvy, mvx) : inp.angle);
+  if (s.vault) { vaultStep(G.m, s, dt); return; }
   const k = 1 - Math.exp(-dt * 14);
   s.vx = lerp(s.vx, mvx * speed, k); s.vy = lerp(s.vy, mvy * speed, k);
   const ox = s.x, oy = s.y;
   s.x += s.vx * dt; s.y += s.vy * dt;
-  collideCircle(G.m, s, CFG.R);
+  collideCircle(G.m, s, CFG.R, (s.z || 0) + (s.jz || 0));
+  airStep(s, dt);
   if (falling) { s.para = Math.max(0, s.para - CFG.PARA_FALL * dt); s.z = 0; }
   else updateFloor(G.m, s, ox, oy);
 }

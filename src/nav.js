@@ -189,8 +189,8 @@ function los3(m, x0, y0, z0, x1, y1, z1) {
   return true;
 }
 
-function collideCircle(m, s, R) {
-  const z = s.z || 0;
+function collideCircle(m, s, R, zOver) {
+  const z = zOver ?? (s.z || 0);
   forBlockersNear(m, s.x - R, s.y - R, s.x + R, s.y + R, o => {
     if (o.z0 !== undefined && !o.water && (z + CFG.BODY_H < o.z0 + 2 || z + 6 > o.z1)) return;   // not at this height
     if (o.t === 'c') {

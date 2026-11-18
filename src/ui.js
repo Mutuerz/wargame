@@ -7,6 +7,7 @@ const keys = new Set();
 const mouse = { x: 0, y: 0, down: false, right: false };
 let throwPressed = false;
 let reloadPressed = false;
+let jumpPressed = false;
 let SPEED = Math.max(1, Math.min(16, Number(params.get('speed')) || 1));
 
 const menu = {
@@ -36,6 +37,7 @@ window.addEventListener('keydown', e => {
   else if (e.code === 'KeyR') reloadPressed = true;
   else if (e.code === 'KeyG') throwPressed = true;
   else if (e.code === 'KeyE' && G.player.riding) { if (G.online) NET.act({ a: 'dismount' }); else dismount(G.player.riding, G.player); }
+  else if (e.code === 'Space' && G.player.alive && !e.repeat) jumpPressed = true;
   else if (!G.player.alive && (e.code === 'Space' || e.code === 'ArrowRight')) G.specIdx++;
   else if (!G.player.alive && e.code === 'ArrowLeft') G.specIdx--;
   else if (e.code === 'KeyM') { G.showMap = !G.showMap; G.mapForStrike = false; }
@@ -117,7 +119,8 @@ function playerControl(s) {
   if (crouch) { mx = 0; my = 0; }
   const tgt = lookTarget(s, 1500);
   const ctl = { mx, my, crouch, fire: mouse.down && !G.paused && !G.showMap, sprint: keys.has('ShiftLeft') || keys.has('ShiftRight'), reload: reloadPressed, interact: keys.has('KeyF'),
-    scope, aimX: tgt.x, aimY: tgt.y, pitch: look.pitch, throwAt: null };
+    scope, aimX: tgt.x, aimY: tgt.y, pitch: look.pitch, throwAt: null, jump: jumpPressed };
+  jumpPressed = false;
   if (throwPressed) {
     // throw toward where you look, up to the grenade range (looking up throws as far as possible)
     const t = lookTarget(s, CFG.GRENADE_RANGE);
@@ -355,6 +358,30 @@ function updateRespawnDock() {
     msg = `You were killed. Next parachute drop in ${Math.ceil(tm.paraT || 0)} s (up to ${CFG.PARA_N} soldiers, first killed first) ${held.length ? `over a fully controlled sector (${held.join(', ')})` : 'over our base, since no sector is fully under our control'}.` + specTxt;
   }
   $('respawnText').textContent = msg;
+  renderRespawnWeapons();
+}
+// While dead: pick the weapon you parachute in with.
+function renderRespawnWeapons() {
+  const wrap = $('respawnOpts'), P = G.player, cur = (P.nextCls || P.cls).key;
+  if (wrap.childElementCount !== Object.keys(CLASSES).length) {
+    wrap.innerHTML = '';
+    for (const k in CLASSES) {
+      const b = document.createElement('button');
+      b.dataset.k = k;
+      b.innerHTML = `<b>${CLASSES[k].name}</b><small>${WEAPON_BLURB[k].split(' · ').slice(1).join(' · ')}</small>`;
+      b.onclick = () => pickRespawnWeapon(k);
+      wrap.appendChild(b);
+    }
+  }
+  for (const b of wrap.children) b.classList.toggle('on', b.dataset.k === cur);
+  wrap.hidden = !!P.riding;
+}
+function pickRespawnWeapon(k) {
+  const P = G.player;
+  if (!CLASSES[k] || P.alive) return;
+  if (G.online) { NET.cls = k; NET.send({ t: 'cls', cls: k }); P.nextCls = CLASSES[k]; }
+  else P.nextCls = CLASSES[k] === P.cls ? null : CLASSES[k];
+  if (!G.online && menu.loadout) menu.loadout[0] = k;
 }
 
 function onMatchEnd() {
