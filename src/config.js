@@ -19,8 +19,9 @@ const CFG = {
   REGEN_DELAY: 10,            // seconds without taking damage before self-heal starts
   REGEN_TIME: 5,              // seconds to heal from 1 HP to full
   CAP_R: 170,                 // capture radius
-  CAP_RATE: 4,                // % per second per soldier (max 3 counted): 25 s alone from neutral
-  WIN_HOLD: 15,               // seconds a team must keep all five points to win
+  CAP_TIME: 30,               // seconds for one soldier to take a neutral sector (twice that from the enemy)
+  CAP_LOG: 0.2,               // each doubling of the majority's edge adds this much speed: 2 -> 1.2x, 4 -> 1.4x, 8 -> 1.6x
+  WIN_HOLD: 15,               // seconds a team must keep all five sectors to win
   SUPPLY_INTERVAL: 60,        // a truck every minute: ammo, health and reinforcements
   TRUCK_SPEED: 306,          // 1.8x the original 170
   CACHE_CHARGES: 6,

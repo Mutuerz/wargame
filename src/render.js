@@ -255,17 +255,19 @@ function drawCaptureProgress(D, M) {
   const P = G.player, m = G.m;
   G.capPanel = false;
   if (!P.alive) return;
-  const p = m.points.find(q => dist2(q.x, q.y, P.x, P.y) < CFG.CAP_R * CFG.CAP_R);
+  const sk = P.para > 0 ? -1 : sectorAt(m, P.x, P.y), p = sk >= 0 ? m.points[sk] : null;
   if (!p) return;
   G.capPanel = true;
   const mine = P.team, us = mine === 0 ? p.c0 : p.c1, them = mine === 0 ? p.c1 : p.c0;
   const prog = mine === 0 ? p.prog : -p.prog;      // +100 = ours, -100 = theirs
   let label, col;
-  if (us && them) { label = `CONTESTED · ${p.name}`; col = '#e6ad45'; }
-  else if (p.owner === mine && prog >= 99.9) { label = `HOLDING ${p.name}`; col = TEAMS[mine].color; }
-  else if (p.owner === 1 - mine) { label = `NEUTRALIZING ${p.name}`; col = '#e3e7df'; }
-  else { label = `CAPTURING ${p.name}`; col = TEAMS[mine].color; }
-  const w = Math.min(380, VW - 40), h = 62, x = VW / 2 - w / 2, y = 96;
+  const edge = us - them, spd = capSpeed(Math.abs(edge));
+  if (us && us === them) { label = `SECTOR ${p.name} · CONTESTED`; col = '#e6ad45'; }
+  else if (edge < 0) { label = `SECTOR ${p.name} · ENEMY ${prog > -99.9 ? 'TAKING IT' : 'HOLDS IT'}  ${spd.toFixed(1)}×`; col = TEAMS[1 - mine].color; }
+  else if (p.owner === mine && prog >= 99.9) { label = `SECTOR ${p.name} · HOLDING`; col = TEAMS[mine].color; }
+  else if (p.owner === 1 - mine) { label = `SECTOR ${p.name} · NEUTRALIZING  ${spd.toFixed(1)}×`; col = '#e3e7df'; }
+  else { label = `SECTOR ${p.name} · CAPTURING  ${spd.toFixed(1)}×`; col = TEAMS[mine].color; }
+  const w = Math.min(420, VW - 40), h = 62, x = VW / 2 - w / 2, y = 96;
   panel(x, y, w, h);
   txt(label, x + 14, y + 22, `700 15px ${D}`, col);
   txt(`${us} ours · ${them} enemy`, x + w - 14, y + 22, `500 12px ${M}`, '#cfd5cc', 'right');
@@ -336,7 +338,8 @@ function drawMap(c, x, y, w, h, big) {
   }
   for (const p of m.points) {
     const col = p.owner >= 0 ? TEAMS[p.owner].color : '#d8d4c4';
-    c.strokeStyle = col; c.lineWidth = big ? 3 : 2; c.beginPath(); c.arc(x + p.x * s, y + p.y * s, Math.max(5, CFG.CAP_R * s), 0, TAU); c.stroke();
+    c.fillStyle = 'rgba(0,0,0,0.55)'; c.beginPath(); c.arc(x + p.x * s, y + p.y * s, big ? 16 : 8, 0, TAU); c.fill();
+    c.strokeStyle = col; c.lineWidth = big ? 2.5 : 1.5; c.stroke();
     c.font = `700 ${big ? 18 : 10}px "Chakra Petch", sans-serif`; c.fillStyle = col; c.textAlign = 'center'; c.textBaseline = 'middle';
     c.fillText(p.name, x + p.x * s, y + p.y * s);
   }

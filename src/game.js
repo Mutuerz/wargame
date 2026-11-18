@@ -77,7 +77,7 @@ function startMatch(m, art, counts, playerSpot, opts = {}) {
     G.smokers = fl.map(f => ({ x: f.x + f.w / 2, y: f.y + f.h / 2, t: Math.random() }));
   }
   G.cam.x = G.player.x; G.cam.y = G.player.y;
-  message('Hold all five points (A to E) at the same time to win', '#e6ad45', 5);
+  message('Hold all five sectors (A to E) at the same time to win', '#e6ad45', 5);
 }
 
 function spawnSoldier(s, choice) {
@@ -407,14 +407,14 @@ function update(dt) {
   if (lockTeam !== G.lock.team) {
     G.lock = { team: lockTeam, t: 0 };
     if (lockTeam >= 0) {
-      msgFor(lockTeam, `We hold all five points. Keep them for ${CFG.WIN_HOLD} s`, TEAMS[lockTeam].color, 4);
-      msgFor(1 - lockTeam, `Enemy holds all five points! Retake one within ${CFG.WIN_HOLD} s`, TEAMS[lockTeam].color, 4);
+      msgFor(lockTeam, `We hold all five sectors. Keep them for ${CFG.WIN_HOLD} s`, TEAMS[lockTeam].color, 4);
+      msgFor(1 - lockTeam, `Enemy holds all five sectors! Retake one within ${CFG.WIN_HOLD} s`, TEAMS[lockTeam].color, 4);
     }
   }
-  if (lockTeam >= 0) { G.lock.t += dt; if (G.lock.t >= CFG.WIN_HOLD) return endMatch(lockTeam, 'Held all five points at once'); }
+  if (lockTeam >= 0) { G.lock.t += dt; if (G.lock.t >= CFG.WIN_HOLD) return endMatch(lockTeam, 'Held all five sectors at once'); }
   for (let t = 0; t < 2; t++) {
     if (m.bridges[t].destroyed && !G.trucks.some(k => k.team === t) && !G.carts.some(c => c.team === t) && !G.soldiers.some(s => s.team === t && s.alive) && !m.points.some(p => p.owner === t))
-      return endMatch(1 - t, `${TEAMS[t].name} was wiped out with no bridge and no point to parachute onto`);
+      return endMatch(1 - t, `${TEAMS[t].name} was wiped out with no bridge and no sector to parachute into`);
   }
   if (G.time >= CFG.TIME_LIMIT) {
     const h0 = m.points.filter(p => p.owner === 0).length, h1 = m.points.filter(p => p.owner === 1).length;
@@ -494,16 +494,23 @@ function updateParticles(dt) {
   G.particles = out.length > 1500 ? out.slice(out.length - 1500) : out;
 }
 
+// Sectors are captured by whoever has more soldiers inside them. The speed grows with the size of the edge
+// (majority minus minority), but slowly: 1 soldier takes CAP_TIME s, an edge of 2 is 1.2x faster, 4 is 1.4x ...
+function capSpeed(edge) { return edge <= 0 ? 0 : 1 + CFG.CAP_LOG * Math.log2(edge); }
 function updateCapture(dt) {
-  const m = G.m, R2 = CFG.CAP_R * CFG.CAP_R;
+  const m = G.m, rate = 100 / CFG.CAP_TIME;
+  for (const p of m.points) { p.c0 = 0; p.c1 = 0; }
+  for (const s of G.soldiers) {
+    if (!s.alive || s.para > 0) continue;
+    const k = sectorAt(m, s.x, s.y);
+    if (k >= 0) { if (s.team === 0) m.points[k].c0++; else m.points[k].c1++; }
+  }
   for (const p of m.points) {
-    let c0 = 0, c1 = 0;
-    for (const s of G.soldiers) if (s.alive && dist2(s.x, s.y, p.x, p.y) < R2) { if (s.team === 0) c0++; else c1++; }
-    p.c0 = c0; p.c1 = c1;
+    const c0 = p.c0, c1 = p.c1;
     const before = p.owner;
-    if (c0 > 0 && c1 > 0) { /* contested */ }
-    else if (c0 > 0) p.prog = Math.min(100, p.prog + CFG.CAP_RATE * Math.min(c0, 3) * dt);
-    else if (c1 > 0) p.prog = Math.max(-100, p.prog - CFG.CAP_RATE * Math.min(c1, 3) * dt);
+    if (c0 > c1) p.prog = Math.min(100, p.prog + rate * capSpeed(c0 - c1) * dt);
+    else if (c1 > c0) p.prog = Math.max(-100, p.prog - rate * capSpeed(c1 - c0) * dt);
+    else if (c0 > 0) { /* even numbers: contested, frozen */ }
     else {
       const target = p.owner === 0 ? 100 : p.owner === 1 ? -100 : 0;
       p.prog += clamp(target - p.prog, -4 * dt, 4 * dt);
@@ -513,7 +520,7 @@ function updateCapture(dt) {
     if (p.prog >= 100 && p.owner !== 0) p.owner = 0;
     if (p.prog <= -100 && p.owner !== 1) p.owner = 1;
     if (p.owner !== before) {
-      if (p.owner === -1) feed(`Point ${p.name} neutralized`, '#8e9b92');
+      if (p.owner === -1) feed(`Sector ${p.name} neutralized`, '#8e9b92');
       else onCapture(p, p.owner);
     }
   }
@@ -526,15 +533,16 @@ function updateCapture(dt) {
 function onCapture(p, t) {
   G.teams[t].points += CFG.CAPTURE_REWARD;
   G.stats.captures[t]++;
-  for (const s of G.soldiers) if (s.alive && s.team === t && dist2(s.x, s.y, p.x, p.y) < CFG.CAP_R * CFG.CAP_R) s.points += CFG.CAPTURER_REWARD;
-  feed(`${TEAMS[t].name} captured ${p.name}  +${CFG.CAPTURE_REWARD} pts`, TEAMS[t].color);
-  msgFor(1 - t, `Point ${p.name} lost`, TEAMS[t].color, 2.5);
+  const pk = G.m.points.indexOf(p);
+  for (const s of G.soldiers) if (s.alive && s.team === t && sectorAt(G.m, s.x, s.y) === pk) s.points += CFG.CAPTURER_REWARD;
+  feed(`${TEAMS[t].name} captured sector ${p.name}  +${CFG.CAPTURE_REWARD} pts`, TEAMS[t].color);
+  msgFor(1 - t, `Sector ${p.name} lost`, TEAMS[t].color, 2.5);
   if (G.player) SFX.capture(t === G.player.team);
   // an ammo crate for the first CAP_AMMO soldiers who reach it
-  for (const c of G.caches.slice()) if (c.ammo && dist(c.x, c.y, p.x, p.y) < CFG.CAP_R) G.caches.splice(G.caches.indexOf(c), 1);
+  for (const c of G.caches.slice()) if (c.ammo && dist(c.x, c.y, p.x, p.y) < 200) G.caches.splice(G.caches.indexOf(c), 1);
   const f = randomFreeNear(G.m, p.x, p.y, 50);
   G.caches.push({ team: t, x: f.x, y: f.y, charges: CFG.CAP_AMMO, ammo: true });
-  msgFor(t, `Point ${p.name} captured. Ammo crate for ${CFG.CAP_AMMO} at the point`, TEAMS[t].color, 3);
+  msgFor(t, `Sector ${p.name} captured. Ammo crate for ${CFG.CAP_AMMO} at its flag`, TEAMS[t].color, 3);
   for (const s of G.soldiers) if (s.bot) s.bot.objT = Math.min(s.bot.objT, Math.random() * 1.5);
 }
 
@@ -612,7 +620,7 @@ function updateParachutes(t, dt) {
     f = f || randomFreeNear(m, p.x, p.y, 140);
     spawnSoldier(s, { type: 'at', x: f.x, y: f.y });
     s.x = f.x; s.y = f.y; s.para = CFG.PARA_H; s.shield = CFG.SPAWN_SHIELD;
-    msgTo(s, `Parachuting in over point ${p.name}`, TEAMS[t].color, 3);
+    msgTo(s, `Parachuting into sector ${p.name}`, TEAMS[t].color, 3);
   }
   feedFor(t, `${dead.length} soldier${dead.length > 1 ? 's' : ''} parachuting in`, TEAMS[t].color);
 }
@@ -785,7 +793,7 @@ function cartTarget(team) {
   else { p = m.points.slice().sort((a, b) => dist(a.x, a.y, depot.x, depot.y) - dist(b.x, b.y, depot.x, depot.y))[0]; stopShort = true; }
   let tx = p.x, ty = p.y;
   if (stopShort) {
-    const d = dist(p.x, p.y, depot.x, depot.y), k = (d - CFG.CAP_R - 160) / d;
+    const d = dist(p.x, p.y, depot.x, depot.y), k = Math.max(0.3, (d - 700) / d);
     tx = depot.x + (p.x - depot.x) * k; ty = depot.y + (p.y - depot.y) * k;
   }
   const f = randomFreeNear(m, tx, ty, 60);

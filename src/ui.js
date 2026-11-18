@@ -168,9 +168,19 @@ function drawPreview(canvas, m, art, deploy) {
     const d = m.depots[t];
     c.strokeStyle = '#e6ad45'; c.lineWidth = 2; c.strokeRect(d.x * s - 12, d.y * s - 9, 24, 18);
   }
+  if (m.sector) {   // sector borders
+    c.fillStyle = 'rgba(240,217,160,0.75)';
+    const cw = NC * s, t = Math.max(1.5, w / 700);
+    for (let j = 0; j < NH; j++) for (let i = 0; i < NW; i++) {
+      const v = m.sector[j * NW + i];
+      if (i + 1 < NW && m.sector[j * NW + i + 1] !== v) c.fillRect((i + 1) * cw - t / 2, j * cw, t, cw);
+      if (j + 1 < NH && m.sector[(j + 1) * NW + i] !== v) c.fillRect(i * cw, (j + 1) * cw - t / 2, cw, t);
+    }
+  }
   for (const p of m.points) {
-    c.strokeStyle = '#e6ad45'; c.lineWidth = 2.5; c.beginPath(); c.arc(p.x * s, p.y * s, CFG.CAP_R * s, 0, TAU); c.stroke();
-    c.fillStyle = '#e6ad45'; c.font = '700 22px "Chakra Petch", sans-serif'; c.fillText(p.name, p.x * s, p.y * s);
+    c.fillStyle = 'rgba(10,14,12,0.7)'; c.beginPath(); c.arc(p.x * s, p.y * s, 15, 0, TAU); c.fill();
+    c.strokeStyle = '#e6ad45'; c.lineWidth = 2; c.stroke();
+    c.fillStyle = '#e6ad45'; c.font = '700 17px "Chakra Petch", sans-serif'; c.fillText(p.name, p.x * s, p.y * s);
   }
   // drop zone band
   c.strokeStyle = 'rgba(127,209,139,0.5)'; c.setLineDash([6, 6]); c.lineWidth = 1.5;
@@ -340,7 +350,7 @@ function updateRespawnDock() {
   let msg;
   const spec = spectateTarget();
   const specTxt = spec && !P.riding ? ` Spectating ${spec.name}: click or Space to switch.` : '';
-  if (P.riding) msg = `Riding the transport to point ${P.riding.target.name} (${Math.ceil(P.riding.hp)} HP). Press E to jump out early.`;
+  if (P.riding) msg = `Riding the transport to sector ${P.riding.target.name} (${Math.ceil(P.riding.hp)} HP). Press E to jump out early.`;
   else if (G.m.bridges[t].destroyed) {
     const held = G.m.points.filter(p => p.owner === t).length;
     msg = held ? `You were killed. Our bridge is down: the next parachute drop (${CFG.PARA_N} soldiers over a point we hold) is in ${Math.ceil(tm.paraT || 0)} s.`

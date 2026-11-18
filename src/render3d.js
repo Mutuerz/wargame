@@ -305,12 +305,23 @@ function r3Build(m, art) {
   });
   for (const bt of [box, cyl, cone, sph, rock]) bt.build(world);
 
-  // capture points: ring on the ground, flag pole with a flag that rises as the point is captured, letter
+  // sector borders: a line on the ground along every edge between two sectors (and around the bases)
+  if (m.sector) {
+    const seg = [], gz = (x, y) => elevAt(m, clamp(x, 0, W - 1), clamp(y, 0, H - 1)) + 3;
+    const add = (x0, y0, x1, y1) => { for (let k = 0; k < 2; k++) { const a = k / 2, b = (k + 1) / 2;
+      const xa = x0 + (x1 - x0) * a, ya = y0 + (y1 - y0) * a, xb = x0 + (x1 - x0) * b, yb = y0 + (y1 - y0) * b;
+      seg.push(new THREE.Vector3(xa, gz(xa, ya), ya), new THREE.Vector3(xb, gz(xb, yb), yb)); } };
+    for (let j = 0; j < NH; j++) for (let i = 0; i < NW; i++) {
+      const v = m.sector[j * NW + i];
+      if (i + 1 < NW && m.sector[j * NW + i + 1] !== v) add((i + 1) * NC, j * NC, (i + 1) * NC, (j + 1) * NC);
+      if (j + 1 < NH && m.sector[(j + 1) * NW + i] !== v) add(i * NC, (j + 1) * NC, (i + 1) * NC, (j + 1) * NC);
+    }
+    world.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(seg), new THREE.LineBasicMaterial({ color: '#f0d9a0', transparent: true, opacity: 0.55 })));
+  }
+  // sector flags: a pole with a flag that rises as the sector is captured, and its letter
   R3.points = m.points.map(pt => {
     const e = elevAt(m, pt.x, pt.y);
-    const pts = [];
-    for (let i = 0; i <= 64; i++) { const a = i / 64 * TAU, x = pt.x + Math.cos(a) * CFG.CAP_R, y = pt.y + Math.sin(a) * CFG.CAP_R; pts.push(new THREE.Vector3(x, elevAt(m, x, y) + 2, y)); }
-    const ring = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: '#e6ad45' }));
+    const ring = null;
     const pole = new THREE.Mesh(UCYL, lam('#d8d4c4')); pole.scale.set(2.2, 170, 2.2); pole.position.set(pt.x, e, pt.y);
     const flagM = lam('#d8d4c4', { side: THREE.DoubleSide });
     const flag = new THREE.Mesh(new THREE.PlaneGeometry(50, 30).translate(25, 0, 0), flagM);
@@ -318,7 +329,7 @@ function r3Build(m, art) {
     const label = labelSprite(pt.name, '#e6ad45', 46);
     label.position.set(pt.x, e + 200, pt.y);
     pole.castShadow = true;
-    world.add(ring, pole, flag, label);
+    world.add(pole, flag, label);
     return { ring, flag, label, e };
   });
   R3.dyn = new THREE.Group(); world.add(R3.dyn);
@@ -599,7 +610,7 @@ function updateDynamic(dt) {
     o.flag.material.color.set(c);
     o.flag.position.y = o.e + 40 + 115 * (pt.owner >= 0 ? 1 : Math.abs(pt.prog) / 100);
     o.flag.rotation.y = Math.sin(G.time * 1.3 + i) * 0.4;
-    o.ring.material.color.set(pt.owner >= 0 ? TEAMS[pt.owner].color : '#e6ad45');
+    if (o.ring) o.ring.material.color.set(pt.owner >= 0 ? TEAMS[pt.owner].color : '#e6ad45');
     const contested = pt.c0 > 0 && pt.c1 > 0;
     relabel(o.label, pt.name, contested && Math.sin(G.time * 10) > 0 ? '#ffffff' : pt.owner >= 0 ? TEAMS[pt.owner].color : '#e6ad45');
   });

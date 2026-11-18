@@ -157,7 +157,7 @@ const NET = {
     const sp = map.spawns[m.team][2]; G.cam.x = sp.x; G.cam.y = sp.y;
     show(null); $('over').hidden = true;
     cv.classList.add('playing');
-    message(`You are on ${TEAMS[m.team].name}. Hold all five points at the same time to win`, TEAMS[m.team].color, 5);
+    message(`You are on ${TEAMS[m.team].name}. Hold all five sectors at the same time to win`, TEAMS[m.team].color, 5);
   },
 
   applyRoster(r) {

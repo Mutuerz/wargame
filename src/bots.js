@@ -97,7 +97,10 @@ function chooseObjective(s) {
     const perch = perchSpot(s, p);
     if (perch) { b.obj = Object.assign({ type: 'perch', p: best, until: G.time + rand(25, 50) }, perch); return; }
   }
-  const spot = randomFreeNear(m, p.x, p.y, CFG.CAP_R * 0.65);
+  // anywhere inside the sector counts: spread out around its flag
+  let spot = null;
+  for (let k = 0; k < 12 && !spot; k++) { const c = randomFreeNear(m, p.x + rand(-420, 420), p.y + rand(-420, 420), 60); if (sectorAt(m, c.x, c.y) === best) spot = c; }
+  spot = spot || randomFreeNear(m, p.x, p.y, 110);
   b.obj = { type: 'cap', p: best, x: spot.x, y: spot.y };
 }
 
