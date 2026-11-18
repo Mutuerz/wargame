@@ -43,6 +43,8 @@ fi
 
 echo "==> Getting the game code ($BRANCH)"
 id -u "$SVC_USER" >/dev/null 2>&1 || useradd --system --home "$APP" --shell /usr/sbin/nologin "$SVC_USER"
+# the checkout belongs to the service user; let root run git in it (setup re-runs and update.sh)
+git config --system --get-all safe.directory 2>/dev/null | grep -qx "$APP" || git config --system --add safe.directory "$APP"
 if [ -d "$APP/.git" ]; then
   git -C "$APP" fetch --depth 1 origin "$BRANCH"
   git -C "$APP" checkout -B "$BRANCH" FETCH_HEAD
