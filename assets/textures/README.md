@@ -12,6 +12,7 @@ These 512 x 512 color maps were generated for Bridgehead and are loaded by the e
 | `leaves.png` | Deciduous tree canopies |
 | `vehicle-paint.png` | Cars, trucks, tanks, and buses |
 | `tire-rubber.png` | Vehicle wheels |
+| `cinematic-sky-equirectangular.jpg` | 2048 x 1024 dawn panorama used as the sky (scene background) and environment map |
 
 The maps are color/albedo textures. Lighting and fine relief continue to come from the existing world lights and `src/surface.js` detail shader.
 

@@ -27,6 +27,17 @@ try {
 } catch (e) { console.error('WebGL is not available', e); }
 
 const scene3 = new THREE.Scene();
+// Sky panorama. If it cannot load (index.html opened from disk), fall back to the theatre's plain sky colour.
+let skyboxFailed = false;
+const SKYBOX_TEXTURE = new THREE.TextureLoader().load('assets/textures/cinematic-sky-equirectangular.jpg', undefined, undefined, () => {
+  skyboxFailed = true;
+  if (scene3.environment === SKYBOX_TEXTURE) scene3.environment = null;
+  if (scene3.background === SKYBOX_TEXTURE) scene3.background = scene3.userData.skyCol || null;
+});
+SKYBOX_TEXTURE.mapping = THREE.EquirectangularReflectionMapping;
+SKYBOX_TEXTURE.colorSpace = THREE.SRGBColorSpace;
+scene3.environment = SKYBOX_TEXTURE;
+if ('environmentIntensity' in scene3) scene3.environmentIntensity = 0.35;
 const cam3 = new THREE.PerspectiveCamera(CFG.FOV, 1, 2, 7000);
 cam3.rotation.order = 'YXZ';
 const vmScene = new THREE.Scene();
@@ -162,7 +173,8 @@ function r3Build(m, art) {
   R3.decals = []; R3.rubble = [];
   const world = new THREE.Group(); R3.world = world; scene3.add(world);
   const B = BIOMES[m.biome], K = SKY[m.biome];
-  scene3.background = col3(K.sky);
+  scene3.userData.skyCol = col3(K.sky);
+  scene3.background = skyboxFailed ? scene3.userData.skyCol : SKYBOX_TEXTURE;
   scene3.fog = new THREE.Fog(K.fog, K.near, K.far);
   R3.fogBase = [K.near, K.far];
 
