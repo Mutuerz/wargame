@@ -209,6 +209,7 @@ function drawHUD() {
   }
   drawCaptureProgress(D, M);
   drawKillFx(D);
+  drawKillList(D);
   // message
   if (G.msg) {
     ctx.globalAlpha = Math.min(1, G.msg.t * 1.5);
@@ -308,6 +309,31 @@ function drawCaptureProgress(D, M) {
   if (f >= 0) ctx.fillRect(mid, by2, bw / 2 * f, bh); else ctx.fillRect(mid + bw / 2 * f, by2, -bw / 2 * f, bh);
   ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillRect(mid - 1, by2 - 3, 2, bh + 6);
   txt(`${Math.round(Math.abs(prog))}%`, mid, by2 + bh + 12, `600 11px ${M}`, '#fff', 'center');
+}
+// Kill list, bottom centre: who you killed and from how far. Each line shows for 4 s; a multi-kill stacks its
+// lines (newest at the bottom, with its chain number), the older ones slide up and fade first.
+function drawKillList(D) {
+  const L = G.killList;
+  if (!L || !L.length) return;
+  const now = performance.now() / 1000;
+  while (L.length && now - L[0].at > 4) L.shift();
+  ctx.save(); ctx.textBaseline = 'middle';
+  for (let i = 0; i < L.length; i++) {
+    const k = L[i], age = now - k.at, a = Math.min(1, age * 6, (4 - age) * 2), slot = L.length - 1 - i;
+    const y = VH - 44 - slot * 26 + Math.max(0, 0.15 - age) * 60;
+    const main = `${k.name}   ${k.dist} m`, tag = k.head ? 'HEADSHOT' : '', chain = k.n > 1 ? `×${k.n}` : '';
+    ctx.font = `700 16px ${D}`; const wm = ctx.measureText(main).width;
+    ctx.font = `800 13px ${D}`; const wt = tag ? ctx.measureText(tag).width + 12 : 0, wc = chain ? ctx.measureText(chain).width + 12 : 0;
+    const w = 34 + wm + wt + wc, x0 = VW / 2 - w / 2;
+    ctx.globalAlpha = a * 0.55; ctx.fillStyle = '#000'; ctx.fillRect(x0 - 8, y - 12, w + 16, 24);
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#ff5a4e'; ctx.font = `800 15px ${D}`; ctx.textAlign = 'left'; ctx.fillText('✕', x0, y + 1);
+    ctx.fillStyle = '#ffffff'; ctx.font = `700 16px ${D}`; ctx.fillText(main, x0 + 24, y + 1);
+    let x = x0 + 24 + wm + 12;
+    if (tag) { ctx.fillStyle = '#ffd27a'; ctx.font = `800 13px ${D}`; ctx.fillText(tag, x, y + 1); x += wt; }
+    if (chain) { ctx.fillStyle = '#ffad45'; ctx.font = `800 13px ${D}`; ctx.fillText(chain, x, y + 1); }
+  }
+  ctx.restore();
 }
 // Big kill callout in the middle of the screen.
 function drawKillFx(D) {

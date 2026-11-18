@@ -113,7 +113,9 @@ function spawnSoldier(s, choice) {
 }
 
 // Kill feedback (enemy down, double kill ... pentakill). The online server routes it to the killer's client.
-function killStreak(s, n, head) { if (s === G.player && typeof announceKill === 'function') announceKill(n, head); }
+// straight-line distance in metres from the killer's eyes to the victim (for the kill list)
+function killDist(a, b) { return Math.round(Math.hypot(a.x - b.x, a.y - b.y, (feetZ(a) - feetZ(b))) / CFG.PX_PER_M); }
+function killStreak(s, n, head, v) { if (s === G.player && typeof announceKill === 'function') announceKill(n, head, v ? killDist(s, v) : null, v ? v.name : ''); }
 function message(text, color = '#e3e7df', t = 3.5) { G.msg = { text, color, t, max: t }; }
 function feed(text, color) { G.feed.unshift({ text, color, t: 7 }); if (G.feed.length > 6) G.feed.pop(); }
 // Messages meant for one team or one soldier. Offline they show only when they concern the local player;
@@ -276,7 +278,7 @@ function kill(s, killer, head) {
     if (killer.team !== s.team) {
       killer.streak = G.time - killer.lastKillT <= CFG.STREAK_T ? Math.min(5, killer.streak + 1) : 1;
       killer.lastKillT = G.time;
-      killStreak(killer, killer.streak, !!head);
+      killStreak(killer, killer.streak, !!head, s);
     }
   }
   const kn = killer ? killer.name : 'Explosion';

@@ -29,7 +29,7 @@ feed = function (text, color) { emit('a', ['f', text, color]); };
 msgFor = function (team, text, color = '#e3e7df', t = 3.5) { emit('t' + team, ['m', text, color, t]); };
 msgTo = function (s, text, color = '#e3e7df', t = 3.5) { if (s.human) emit('s' + s.id, ['m', text, color, t, 1]); };
 feedFor = function (team, text, color) { emit('t' + team, ['f', text, color]); };
-killStreak = function (s, n, head) { if (s.human) emit('s' + s.id, ['ks', n, head ? 1 : 0]); };
+killStreak = function (s, n, head, v) { if (s.human) emit('s' + s.id, ['ks', n, head ? 1 : 0, v ? killDist(s, v) : -1, v ? v.name : '']); };
 
 const _shoot = shoot;
 shoot = function (s, moving) {

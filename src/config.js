@@ -61,6 +61,7 @@ const CFG = {
   // ---- 3D (world units are the same pixels as the map; about 20 px = 1 m)
   LEVEL_H: 60,                // height of one terrain level
   EYE: 30,                    // eye height above the floor
+  PX_PER_M: 20,               // world units per metre (a soldier is 36 tall, about 1.8 m): for kill distances
   BODY_H: 36,                 // soldier hitbox height
   HEAD_H: 28,                 // hits above this height are headshots
   HEADSHOT: 1.6,              // headshot damage multiplier

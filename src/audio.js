@@ -147,9 +147,11 @@ function announcerVoice() {
   VOICE.pick = vs.find(v => /male|daniel|david|guy|fred|alex|george|arthur|james/i.test(v.name) && !/female/i.test(v.name)) || vs[0];
   return VOICE.pick;
 }
-function announceKill(n, head) {
+function announceKill(n, head, dist, name) {
   n = clamp(n | 0, 1, 5);
   const [key, text, said] = KILL_LINES[n];
+  // the kill list at the bottom of the screen: one line per kill, multi-kills stack up
+  if (G && dist != null) { (G.killList || (G.killList = [])).push({ name, dist, head, n, at: performance.now() / 1000 }); if (G.killList.length > 5) G.killList.shift(); }
   if (G) G.killFx = { n, text, t: n > 1 ? 2.2 : 1.4, max: n > 1 ? 2.2 : 1.4 };
   if (!SFX.ok()) return;
   // sting: a deep hit, brighter and longer for bigger streaks
