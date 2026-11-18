@@ -670,9 +670,9 @@ function updateDynamic(dt) {
   }
   const gp = pool('nade', () => { const s = new THREE.Mesh(new THREE.SphereGeometry(3.5, 8, 6), lam('#3a4a2c')); s.castShadow = true; return s; });
   for (const g of G.grenades) {
-    const o = gp.get(), age = CFG.GRENADE_FUSE - g.fuse;
-    const arc = age < 0.8 ? Math.sin(age / 0.8 * Math.PI) * 46 : 0;
-    o.position.set(g.x, elevAt(m, g.x, g.y) + (g.z || 0) + 3.5 + arc, g.y);
+    const o = gp.get();
+    o.position.set(g.x, elevAt(m, g.x, g.y) + (g.z || 0) + 3.5, g.y);
+    o.rotation.set(g.spin || 0, 0, (g.spin || 0) * 0.7);
   }
   gp.done();
   const c4p = pool('c4', () => { const g = new THREE.Group(); g.add(meshBox(14, 6, 10, '#c9b27a')); const l = new THREE.Mesh(new THREE.SphereGeometry(2, 6, 4), new THREE.MeshBasicMaterial({ color: '#ff3b2f' })); l.position.y = 8; l.name = 'led'; g.add(l); return g; });

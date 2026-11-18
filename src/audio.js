@@ -57,6 +57,7 @@ const SFX = {
     this.tone(v, 90, 25, 0.9, 'sine');
   },
   step(v = 0.1, soft) { if (this.ok()) { this.burst(v * (soft ? 0.5 : 1), 260 + Math.random() * 120, 1.2, 0.07, 'lowpass', 0.6); this.burst(v * 0.35, 1800 + Math.random() * 900, 2, 0.03); } },
+  nade(x, y) { if (this.ok()) this.tone(this.vol(x, y) * 0.22, 2600 + Math.random() * 600, 1900, 0.05, 'triangle'); },
   click(v = 0.25) { if (this.ok()) this.tone(v, 1800, 900, 0.04, 'square'); },
   reload() { if (!this.ok()) return; this.tone(0.15, 600, 300, 0.06, 'square'); setTimeout(() => this.ok() && this.tone(0.18, 900, 500, 0.05, 'square'), 260); },
   beep(x, y) { if (this.ok()) this.tone(this.vol(x, y) * 0.4, 1760, 1760, 0.08, 'square'); },

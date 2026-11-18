@@ -183,7 +183,7 @@ const SIM = {
       lock: [G.lock.team, r2(G.lock.t)],
       trk: G.trucks.map(t => [nid(t), t.team, r1(t.x), r1(t.y), t.dir, t.state]),
       carts: G.carts.map(c => [nid(c), c.team, r1(c.x), r1(c.y), r2(c.angle), Math.ceil(c.hp), c.riders.length, c.target.name]),
-      gr: G.grenades.map(g => [nid(g), r1(g.x), r1(g.y), r2(g.fuse), g.team, r2(g.spin), r1(g.z)]),
+      gr: G.grenades.map(g => [nid(g), r1(g.x), r1(g.y), r2(g.fuse ?? 9), g.team, r2(g.spin), r1(g.z)]),
       c4: G.c4s.map(c => [r1(c.x), r1(c.y), r2(c.fuse), c.bridge, c.team, r2(c.beep)]),
       drops: G.drops.map(d => [nid(d), r1(d.x), r1(d.y), r2(d.fall), d.c4 ? 1 : 0]),
       caches: G.caches.map(c => [c.team, r1(c.x), r1(c.y), c.charges, c.depot ? 1 : 0, c.ammo ? 1 : 0]),

@@ -378,7 +378,7 @@ const NET = {
     });
     for (const k of this.carts.keys()) if (!live.has(k) && !(P.riding && P.riding.nid === k)) this.carts.delete(k);
     const ga = byId(A.gr, 0);
-    G.grenades = B.gr.map(g => { const a = ga.get(g[0]) || g; return { nid: g[0], x: L(a[1], g[1]), y: L(a[2], g[2]), fuse: g[3], team: g[4], spin: g[5], z: g[6] || 0 }; });
+    G.grenades = B.gr.map(g => { const a = ga.get(g[0]) || g; return { nid: g[0], x: L(a[1], g[1]), y: L(a[2], g[2]), fuse: g[3], team: g[4], spin: g[5], z: L(a[6] || 0, g[6] || 0) }; });
     G.c4s = B.c4.map(c => ({ x: c[0], y: c[1], fuse: c[2], bridge: c[3], team: c[4], beep: c[5] }));
     const oldDrops = new Map(G.drops.map(d => [d.nid, d]));
     G.drops = B.drops.map(d => { const o = oldDrops.get(d[0]); return { nid: d[0], x: d[1], y: d[2], fall: d[3], c4: !!d[4], t: o ? o.t : Math.random() * 10 }; });

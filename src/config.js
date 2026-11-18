@@ -30,9 +30,10 @@ const CFG = {
   CART_R: 28,
   CART_SPEED: 288,           // 1.8x the original 160
   CACHE_MAX: 12,
-  GRENADE_CHANCE: 0.5,        // half the soldiers spawn with a grenade
+  GRENADES: 1,                // every soldier spawns with this many grenades
   GRENADE_RANGE: 380,         // max throw distance
-  GRENADE_FUSE: 5,
+  GRENADE_LAND_FUSE: 2,       // seconds from first touching the ground to the explosion
+  GRENADE_G: 520,             // gravity for thrown grenades (px/s²)
   GRENADE_RADIUS: 170,
   GRENADE_DMG: 110,
   STRIKE_COST: 500,           // team points needed (and spent) for an air strike

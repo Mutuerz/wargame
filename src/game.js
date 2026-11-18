@@ -106,7 +106,7 @@ function spawnSoldier(s, choice) {
   if (s.slot) s.cls = s.prim;   // always come back holding the main weapon
   if (s.nextCls) { s.cls = s.nextCls; s.nextCls = null; refillAmmo(s); }
   s.prim = s.cls; s.slot = 0; s.stash = {};
-  s.nades = Math.random() < CFG.GRENADE_CHANCE ? 1 : 0;
+  s.nades = CFG.GRENADES;
   s.act = null; s.actT = 0;
   s.angle = s.team === 0 ? 0 : Math.PI;
   if (s.bot) resetBrain(s);
@@ -752,27 +752,84 @@ function endMatch(winner, reason) {
 }
 
 // ---------------- Grenades
+// Grenades fly a real arc: thrown from eye height at about 40 degrees (steeper when the target is above you),
+// with just the speed to land on the aimed point. They bounce off walls, floors, roofs and the ground, roll
+// to a stop, and go off CFG.GRENADE_LAND_FUSE seconds after first touching down.
 function throwGrenade(s, tx, ty) {
+  const m = G.m;
   let dx = tx - s.x, dy = ty - s.y, d = Math.hypot(dx, dy) || 1;
-  const reach = Math.min(d, CFG.GRENADE_RANGE);
+  const reach0 = clamp(d, 40, CFG.GRENADE_RANGE);
   dx /= d; dy /= d;
-  const k = 2.2;                       // ground friction; total travel = v0 / k
+  const reach = reach0 - 14;   // measured from the hand, a little in front of you
+  const sx = s.x + dx * 14, sy = s.y + dy * 14, sz = eyeZ(s) + 2, g0 = CFG.GRENADE_G;
+  const dh = elevAt(m, clamp(s.x + dx * reach0, 0, W - 1), clamp(s.y + dy * reach0, 0, H - 1)) + 3 - sz;
+  let th = 0.7, v = 0;
+  for (let i = 0; i < 6; i++, th += 0.1) {   // steepen until the arc can reach (target far above you)
+    const den = 2 * Math.cos(th) ** 2 * (reach * Math.tan(th) - dh);
+    if (den > 0) { v = Math.sqrt(g0 * reach * reach / den); break; }
+  }
+  if (!v) v = 520;
+  v = Math.min(v, 620);
   s.nades--;
-  G.grenades.push({ x: s.x + dx * 20, y: s.y + dy * 20, z: s.z || 0, vx: dx * reach * k, vy: dy * reach * k, k, fuse: CFG.GRENADE_FUSE, team: s.team, owner: s, spin: 0 });
+  const ch = Math.cos(th) * v;
+  G.grenades.push({ x: sx, y: sy, z: sz - elevAt(m, sx, sy), vx: dx * ch, vy: dy * ch, vz: Math.sin(th) * v, fuse: null, life: 0,
+    team: s.team, owner: s, spin: 0 });
   if (s.isPlayer) SFX.click(0.15);
 }
+// Floor under a grenade at height h above the terrain: ground, the upper floor, a stair step or a roof.
+function nadeFloor(m, x, y, h) {
+  const f = houseAt(m, x, y);
+  if (!f) return 0;
+  const FH = CFG.FLOOR_H, roof = f.stories * FH;
+  if (h >= roof - 3) return roof;
+  if (f.stories === 2) {
+    if (inStair(f.stair, x, y)) { const t = stairT(f.stair, x, y) * FH; return h >= t - 3 ? t : 0; }
+    if (h >= FH - 3) return FH;
+  }
+  return 0;
+}
+function nadeCeiling(m, x, y, h) {
+  const f = houseAt(m, x, y);
+  if (!f) return Infinity;
+  const FH = CFG.FLOOR_H, roof = f.stories * FH;
+  if (h >= roof - 3) return Infinity;
+  if (f.stories === 2 && h < FH - 3 && !inStair(f.stair, x, y)) return FH;
+  return roof;
+}
 function updateGrenades(dt) {
-  const m = G.m;
+  const m = G.m, g0 = CFG.GRENADE_G;
   for (const g of G.grenades.slice()) {
-    g.fuse -= dt;
+    g.life += dt;
+    if (g.fuse !== null) g.fuse -= dt;
+    const air = g.vz !== 0 || g.z > nadeFloor(m, g.x, g.y, g.z) + 0.5;
+    // horizontal: bounce off walls and anything solid at the grenade's height
     const nx = g.x + g.vx * dt, ny = g.y + g.vy * dt;
-    if (solidAt(m, nx, g.y, g.z)) g.vx = -g.vx * 0.45; else g.x = nx;
-    if (solidAt(m, g.x, ny, g.z)) g.vy = -g.vy * 0.45; else g.y = ny;
-    g.x = clamp(g.x, 5, W - 5); g.y = clamp(g.y, 5, H - 5);
-    if (g.z > 0) { const f = houseAt(m, g.x, g.y); if (!f || f.stories < 2 || inStair(f.stair, g.x, g.y)) g.z = 0; }   // rolls off the upper floor
-    const f = Math.exp(-g.k * dt); g.vx *= f; g.vy *= f;
-    g.spin += Math.hypot(g.vx, g.vy) * dt * 0.1;
-    if (g.fuse <= 0) {
+    const absZ = g.z + elevAt(m, g.x, g.y);
+    const hit = (x, y) => x < 5 || y < 5 || x > W - 5 || y > H - 5 || !!blockedAt(m, x, y, absZ + 2);
+    if (hit(nx, g.y)) { g.vx = -g.vx * 0.4; g.vy *= 0.8; SFX.nade && SFX.nade(g.x, g.y); } else g.x = nx;
+    if (hit(g.x, ny)) { g.vy = -g.vy * 0.4; g.vx *= 0.8; SFX.nade && SFX.nade(g.x, g.y); } else g.y = ny;
+    if (air) {
+      g.vz -= g0 * dt;
+      let h = g.z + g.vz * dt;
+      const ceil = nadeCeiling(m, g.x, g.y, g.z);
+      if (h > ceil - 2) { h = ceil - 2; g.vz = -Math.abs(g.vz) * 0.3; }
+      const fl = nadeFloor(m, g.x, g.y, g.z);
+      if (h <= fl) {
+        h = fl;
+        if (g.fuse === null) g.fuse = CFG.GRENADE_LAND_FUSE;   // starts counting on the first touch-down
+        if (Math.abs(g.vz) > 60) { g.vz = -g.vz * 0.28; g.vx *= 0.42; g.vy *= 0.42; SFX.nade && SFX.nade(g.x, g.y); }
+        else g.vz = 0;
+      }
+      g.z = h;
+    } else {
+      // rolling: settle on whatever floor is below, slow down by friction
+      const fl = nadeFloor(m, g.x, g.y, g.z);
+      if (g.z > fl + 0.5) g.vz = -1; else g.z = fl;
+      const f = Math.exp(-6 * dt); g.vx *= f; g.vy *= f;
+      if (g.fuse === null) g.fuse = CFG.GRENADE_LAND_FUSE;
+    }
+    g.spin += (Math.hypot(g.vx, g.vy) + Math.abs(g.vz)) * dt * 0.12;
+    if ((g.fuse !== null && g.fuse <= 0) || g.life > 8) {
       G.grenades.splice(G.grenades.indexOf(g), 1);
       explode(g.x, g.y, CFG.GRENADE_RADIUS, CFG.GRENADE_DMG, g.owner, elevAt(m, g.x, g.y) + g.z + 4);
     }
