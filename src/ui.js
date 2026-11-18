@@ -7,6 +7,7 @@ const keys = new Set();
 const mouse = { x: 0, y: 0, down: false, right: false };
 let throwPressed = false;
 let reloadPressed = false;
+let jumpPressed = false;
 let SPEED = Math.max(1, Math.min(16, Number(params.get('speed')) || 1));
 
 const menu = {
@@ -20,50 +21,119 @@ const menu = {
 function isTyping() { const a = document.activeElement; return a && a.tagName === 'INPUT'; }
 window.addEventListener('keydown', e => {
   if (isTyping()) return;
-  if (e.code === 'Tab' || e.code === 'Space') e.preventDefault();
+  if (e.code === 'Tab' || e.code === 'Space' || ((e.code === 'ControlLeft' || e.code === 'ControlRight') && G && !G.over)) e.preventDefault();
+  // in a match, Ctrl+R (crouch + reload), F5 and Ctrl+W/S/D/F/G must not reach the browser
+  if (G && !G.over && (e.code === 'F5' || ((e.ctrlKey || e.metaKey) && /^Key[RWSDFGEQAC]$/.test(e.code)))) e.preventDefault();
   keys.add(e.code);
   if (!G || G.over || G.state !== 'play') return;
-  if (e.code === 'Escape' && G.targeting) G.targeting = false;
+  if (e.code === 'Escape' && G.targeting) { G.targeting = false; if (G.mapForStrike) { G.showMap = false; G.mapForStrike = false; } }
   else if (e.code === 'Escape') togglePause();
   else if (e.code === 'KeyB') {
-    if (canStrike(G.player.team)) { G.targeting = !G.targeting; if (G.targeting) message('Click to mark the air strike target. Right click or Esc cancels', '#e6ad45', 3); }
+    if (canStrike(G.player.team)) {
+      G.targeting = !G.targeting;
+      if (G.targeting) { G.showMap = true; G.mapForStrike = true; unlockPointer(); message('Click the map to mark the air strike target. Right click or Esc cancels', '#e6ad45', 3); }
+      else if (G.mapForStrike) { G.showMap = false; G.mapForStrike = false; }
+    }
     else message(G.strikes.some(s => s.team === G.player.team) ? 'An air strike is already on its way' : `Air strike needs ${CFG.STRIKE_COST} team points (you have ${G.teams[G.player.team].points})`, '#8e9b92', 2);
   }
   else if (e.code === 'KeyR') reloadPressed = true;
   else if (e.code === 'KeyG') throwPressed = true;
   else if (e.code === 'KeyE' && G.player.riding) { if (G.online) NET.act({ a: 'dismount' }); else dismount(G.player.riding, G.player); }
+  else if (e.code === 'Space' && G.player.alive && !e.repeat) jumpPressed = true;
+  else if (G.player.alive && (e.code === 'Digit1' || e.code === 'Digit2')) selectSlot(e.code === 'Digit2' ? 1 : 0);
+  else if (!G.player.alive && !G.player.riding && /^Digit[1-9]$/.test(e.code)) { const k = Object.keys(CLASSES)[+e.code.slice(5) - 1]; if (k) pickRespawnWeapon(k); }
   else if (!G.player.alive && (e.code === 'Space' || e.code === 'ArrowRight')) G.specIdx++;
+  else if (!G.player.alive && e.code === 'KeyV') R3.specFP = !R3.specFP;   // spectate in first / third person
   else if (!G.player.alive && e.code === 'ArrowLeft') G.specIdx--;
-  else if (e.code === 'KeyM') G.showMap = !G.showMap;
+  else if (e.code === 'KeyM') { G.showMap = !G.showMap; G.mapForStrike = false; }
   else if (e.code === 'KeyP') togglePerks();
   else if (e.code === 'KeyN') { const on = SFX.toggle(); message(on ? 'Sound on' : 'Sound muted', '#8e9b92', 1.5); }
   else if (e.code === 'Tab') G.showScores = true;
 });
 window.addEventListener('keyup', e => { keys.delete(e.code); if (e.code === 'Tab' && G) G.showScores = false; });
+// Ctrl is crouch: Ctrl+W would close the tab, so ask before leaving a running match
+window.addEventListener('beforeunload', e => { if (G && !G.over) { e.preventDefault(); e.returnValue = ''; } });
 window.addEventListener('blur', () => { keys.clear(); mouse.down = false; mouse.right = false; });
-cv.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
-cv.addEventListener('mousedown', e => {
-  if (G && G.targeting && !G.over) {
-    if (e.button === 0) { const w = G.showMap ? mapToWorld(mouse.x, mouse.y) : screenToWorld(e.clientX, e.clientY); if (w) { if (G.online) NET.act({ a: 'strike', x: Math.round(w.x), y: Math.round(w.y) }); else callStrike(G.player.team, w.x, w.y); } }
-    G.targeting = false; return;
+// ---------- first-person mouse look (pointer lock)
+const look = R3.look;
+let wantUnlock = false, lockFailed = !cv.requestPointerLock;
+// Some embedded pages do not allow pointer lock: then the mouse still looks around while it moves over the
+// game, and holding the cursor near the left or right edge keeps turning.
+function lockPointer() {
+  if (document.pointerLockElement === cv || lockFailed) return;
+  try { const p = cv.requestPointerLock(); if (p && p.catch) p.catch(() => { lockFailed = true; }); } catch (e) { lockFailed = true; }
+}
+document.addEventListener('pointerlockerror', () => { lockFailed = true; });
+function mouseLooks() { return document.pointerLockElement === cv || (lockFailed && G && !G.paused && !G.showMap); }
+function unlockPointer() { if (document.pointerLockElement) { wantUnlock = true; document.exitPointerLock(); } }
+document.addEventListener('pointerlockchange', () => {
+  if (document.pointerLockElement) return;
+  mouse.down = false; mouse.right = false;
+  // Esc while playing releases the mouse: open the menu, unless we released it on purpose (map, perks)
+  if (!wantUnlock && G && !G.over && !G.paused && G.state === 'play' && $('perks').hidden && !G.showMap) togglePause();
+  wantUnlock = false;
+});
+cv.addEventListener('mousemove', e => {
+  mouse.x = e.clientX; mouse.y = e.clientY;
+  if (mouseLooks() && G && !G.over) {
+    const k = CFG.SENS / (R3.zoom || 1);
+    look.yaw += e.movementX * k;
+    look.pitch = clamp(look.pitch - e.movementY * k, -1.45, 1.45);
   }
+});
+cv.addEventListener('mousedown', e => {
+  SFX.init();
+  if (G && G.targeting && !G.over) {
+    if (e.button === 0) { const w = mapToWorld(mouse.x, mouse.y); if (w) { if (G.online) NET.act({ a: 'strike', x: Math.round(w.x), y: Math.round(w.y) }); else callStrike(G.player.team, w.x, w.y); } }
+    G.targeting = false; if (G.mapForStrike) { G.showMap = false; G.mapForStrike = false; }
+    if (!G.showMap) lockPointer();
+    return;
+  }
+  // While dead the mouse stays free for the respawn weapon buttons; the first click after respawning takes control again.
+  if (G && !G.over && !G.paused && !G.showMap && document.pointerLockElement !== cv && !lockFailed && G.player.alive) { lockPointer(); return; }
   if (G && !G.player.alive && !G.player.riding && !G.over) { G.specIdx += e.button === 2 ? -1 : 1; return; }
-  if (e.button === 0) mouse.down = true; if (e.button === 2) mouse.right = true; SFX.init(); });
+  if (e.button === 0) mouse.down = true; if (e.button === 2) mouse.right = true; });
 window.addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; if (e.button === 2) mouse.right = false; });
 cv.addEventListener('contextmenu', e => e.preventDefault());
+cv.addEventListener('wheel', e => { if (G && !G.over && G.player.alive && mouseLooks()) selectSlot((G.player.slot || 0) ? 0 : 1); }, { passive: true });
 
+// Where the crosshair points: the first thing the view ray hits (terrain or a solid), or a point far ahead.
+function lookTarget(s, maxD) {
+  const m = G.m, ex = s.x, ey = s.y, ez = eyeZ(s);
+  const cp = Math.cos(look.pitch), dx = Math.cos(look.yaw) * cp, dy = Math.sin(look.yaw) * cp, dz = Math.sin(look.pitch);
+  for (let d = 16; d <= maxD; d += 12) {
+    const x = ex + dx * d, y = ey + dy * d, z = ez + dz * d;
+    if (x < 0 || y < 0 || x >= W || y >= H) return { x: clamp(x, 0, W - 1), y: clamp(y, 0, H - 1), d, hit: true };
+    if (blockedAt(m, x, y, z)) return { x, y, d, hit: true };
+  }
+  return { x: ex + dx / (cp || 1) * maxD, y: ey + dy / (cp || 1) * maxD, d: maxD, hit: false };
+}
 function playerControl(s) {
-  let mx = 0, my = 0;
-  if (keys.has('KeyW') || keys.has('ArrowUp')) my -= 1;
-  if (keys.has('KeyS') || keys.has('ArrowDown')) my += 1;
-  if (keys.has('KeyA') || keys.has('ArrowLeft')) mx -= 1;
-  if (keys.has('KeyD') || keys.has('ArrowRight')) mx += 1;
-  const w = screenToWorld(mouse.x, mouse.y);
-  s.angle = Math.atan2(w.y - s.y, w.x - s.x);
-  const scope = (mouse.right || keys.has('KeyQ')) && !!s.cls.scopeRange;
-  if (scope) { mx = 0; my = 0; }   // scoping means holding position
-  const ctl = { mx, my, fire: mouse.down && !G.paused, sprint: keys.has('ShiftLeft') || keys.has('ShiftRight'), reload: reloadPressed, interact: keys.has('KeyF'),
-    scope, aimX: w.x, aimY: w.y, throwAt: throwPressed ? { x: w.x, y: w.y } : null };
+  let f = 0, r = 0;
+  if (keys.has('KeyW') || keys.has('ArrowUp')) f += 1;
+  if (keys.has('KeyS') || keys.has('ArrowDown')) f -= 1;
+  if (keys.has('KeyA') || keys.has('ArrowLeft')) r -= 1;
+  if (keys.has('KeyD') || keys.has('ArrowRight')) r += 1;
+  const yaw = look.yaw, cy = Math.cos(yaw), sy = Math.sin(yaw);
+  // forward along the view, right is 90 degrees clockwise on the map
+  let mx = cy * f - sy * r, my = sy * f + cy * r;
+  s.angle = yaw;
+  // right click / Q: the sniper scope (hold still), or aim down the sights with any other gun
+  const scope = mouse.right || keys.has('KeyQ');
+  if (scope && s.cls.scopeRange) { mx = 0; my = 0; }   // scoping means holding position
+  // Ctrl (or C): crouch in place for a steadier aim
+  const crouch = keys.has('ControlLeft') || keys.has('ControlRight') || keys.has('KeyC');
+  if (crouch) { mx = 0; my = 0; }
+  const tgt = lookTarget(s, 1500);
+  const ctl = { mx, my, crouch, fire: mouse.down && !G.paused && !G.showMap, sprint: keys.has('ShiftLeft') || keys.has('ShiftRight'), reload: reloadPressed, interact: keys.has('KeyF'),
+    scope, aimX: tgt.x, aimY: tgt.y, pitch: look.pitch, throwAt: null, jump: jumpPressed };
+  jumpPressed = false;
+  if (throwPressed) {
+    // throw toward where you look, up to the grenade range (looking up throws as far as possible)
+    const t = lookTarget(s, CFG.GRENADE_RANGE);
+    const d = look.pitch > -0.05 ? CFG.GRENADE_RANGE : Math.min(CFG.GRENADE_RANGE, t.d * Math.cos(look.pitch));
+    ctl.throwAt = { x: s.x + Math.cos(yaw) * d, y: s.y + Math.sin(yaw) * d };
+  }
   reloadPressed = false; throwPressed = false;
   return ctl;
 }
@@ -108,9 +178,19 @@ function drawPreview(canvas, m, art, deploy) {
     const d = m.depots[t];
     c.strokeStyle = '#e6ad45'; c.lineWidth = 2; c.strokeRect(d.x * s - 12, d.y * s - 9, 24, 18);
   }
+  if (m.sector) {   // sector borders
+    c.fillStyle = 'rgba(240,217,160,0.75)';
+    const cw = NC * s, t = Math.max(1.5, w / 700);
+    for (let j = 0; j < NH; j++) for (let i = 0; i < NW; i++) {
+      const v = m.sector[j * NW + i];
+      if (i + 1 < NW && m.sector[j * NW + i + 1] !== v) c.fillRect((i + 1) * cw - t / 2, j * cw, t, cw);
+      if (j + 1 < NH && m.sector[(j + 1) * NW + i] !== v) c.fillRect(i * cw, (j + 1) * cw - t / 2, cw, t);
+    }
+  }
   for (const p of m.points) {
-    c.strokeStyle = '#e6ad45'; c.lineWidth = 2.5; c.beginPath(); c.arc(p.x * s, p.y * s, CFG.CAP_R * s, 0, TAU); c.stroke();
-    c.fillStyle = '#e6ad45'; c.font = '700 22px "Chakra Petch", sans-serif'; c.fillText(p.name, p.x * s, p.y * s);
+    c.fillStyle = 'rgba(10,14,12,0.7)'; c.beginPath(); c.arc(p.x * s, p.y * s, 15, 0, TAU); c.fill();
+    c.strokeStyle = '#e6ad45'; c.lineWidth = 2; c.stroke();
+    c.fillStyle = '#e6ad45'; c.font = '700 17px "Chakra Petch", sans-serif'; c.fillText(p.name, p.x * s, p.y * s);
   }
   // drop zone band
   c.strokeStyle = 'rgba(127,209,139,0.5)'; c.setLineDash([6, 6]); c.lineWidth = 1.5;
@@ -223,6 +303,8 @@ function beginMatch(auto = false) {
   startMatch(m, art, menu.counts, menu.playerSpot, { skill: menu.skill, auto, playerClass: params.get('class'), loadout: menu.loadout.slice() });
   show(null);
   cv.classList.add('playing');
+  look.yaw = G.player.angle; look.pitch = 0;
+  lockPointer();
 }
 
 // ---------- pause / perks / respawn / end
@@ -234,17 +316,18 @@ function togglePause() {
   $('quit').textContent = G.online ? 'Leave match' : 'Quit to menu';
   $('pause').hidden = !G.paused;
   cv.classList.toggle('playing', !G.paused);
+  if (G.paused) unlockPointer();
 }
-$('resume').onclick = togglePause;
+$('resume').onclick = () => { togglePause(); lockPointer(); };
 $('quit').onclick = () => { if (G && G.online) { $('pause').hidden = true; NET.leave(); return; } G = null; $('respawn').hidden = true; cv.classList.remove('playing'); show('menu'); };
 
 function togglePerks() {
   const open = $('perks').hidden;
   $('perks').hidden = !open;
   cv.classList.toggle('playing', !open);
-  if (open) renderPerks();
+  if (open) { unlockPointer(); renderPerks(); }
 }
-$('closePerks').onclick = togglePerks;
+$('closePerks').onclick = () => { togglePerks(); lockPointer(); };
 function renderPerks() {
   const P = G.player;
   $('perkTeam').textContent = G.teams[P.team].points;
@@ -268,28 +351,59 @@ function renderPerks() {
   }
 }
 
+let deadDock = false;
 function updateRespawnDock() {
   const P = G && G.player;
-  if (!G || G.over || P.alive || G.auto) { $('respawn').hidden = true; return; }
+  if (!G || G.over || P.alive || G.auto) { $('respawn').hidden = true; deadDock = false; cv.classList.remove('dead'); return; }
+  // Just died: free the mouse so the weapon buttons can be clicked (no pause menu for this release).
+  if (!deadDock) { deadDock = true; unlockPointer(); cv.classList.add('dead'); }
+  if (typeof KC !== 'undefined' && KC.on) { $('respawn').hidden = true; return; }   // out of the way during the kill cam
   $('respawn').hidden = false;
   const t = P.team, tm = G.teams[t];
-  const truck = G.trucks.find(k => k.team === t && k.state === 'in');
   let msg;
   const spec = spectateTarget();
-  const specTxt = spec && !P.riding ? ` Spectating ${spec.name}: click or Space to switch.` : '';
-  if (P.riding) msg = `Riding the transport to point ${P.riding.target.name} (${Math.ceil(P.riding.hp)} HP). Press E to jump out early.`;
-  else if (G.m.bridges[t].destroyed) msg = 'You were killed. Our bridge is down, so no more reinforcements can arrive.' + specTxt;
-  else if (truck) msg = 'You were killed. Your truck is crossing the bridge now.' + specTxt;
+  const specTxt = spec && !P.riding ? ` Spectating ${spec.name}: click or Space to switch, V for ${R3.specFP ? 'third' : 'first'} person. Number keys pick your weapon.` : '';
+  if (P.riding) msg = `Riding the transport to sector ${P.riding.target.name} (${Math.ceil(P.riding.hp)} HP). Press E to jump out early.`;
   else {
-    const lane = G.m.truckLanes[t];
-    const eta = tm.supplyT + Math.abs(lane.to - lane.from) / CFG.TRUCK_SPEED;
-    msg = `You were killed. You return with the next truck in ${eta.toFixed(0)} s.` + specTxt;
+    const held = G.m.points.filter(p => fullyHeld(p, t)).map(p => p.name);
+    msg = `You were killed. Next parachute drop in ${Math.ceil(tm.paraT || 0)} s (up to ${CFG.PARA_N} soldiers, first killed first) ${held.length ? `over a fully controlled sector (${held.join(', ')})` : 'over our base, since no sector is fully under our control'}.` + specTxt;
   }
   $('respawnText').textContent = msg;
+  renderRespawnWeapons();
+}
+// While dead: pick the weapon you parachute in with.
+function renderRespawnWeapons() {
+  const wrap = $('respawnOpts'), P = G.player, cur = (P.nextCls || P.prim || P.cls).key;
+  if (wrap.childElementCount !== Object.keys(CLASSES).length) {
+    wrap.innerHTML = '';
+    for (const k in CLASSES) {
+      const b = document.createElement('button');
+      b.dataset.k = k;
+      b.innerHTML = `<b>${Object.keys(CLASSES).indexOf(k) + 1} · ${CLASSES[k].name}</b><small>${WEAPON_BLURB[k].split(' · ').slice(1).join(' · ')}</small>`;
+      b.onclick = () => pickRespawnWeapon(k);
+      wrap.appendChild(b);
+    }
+  }
+  for (const b of wrap.children) b.classList.toggle('on', b.dataset.k === cur);
+  wrap.hidden = !!P.riding;
+}
+// 1 = main weapon, 2 = sidearm (online the server swaps and the next snapshot shows it)
+function selectSlot(n) {
+  const P = G.player;
+  if ((P.slot || 0) === n) return;
+  if (G.online) NET.act({ a: 'slot', n }); else switchWeapon(P, n);
+}
+function pickRespawnWeapon(k) {
+  const P = G.player;
+  if (!CLASSES[k] || P.alive) return;
+  if (G.online) { NET.cls = k; NET.send({ t: 'cls', cls: k }); P.nextCls = CLASSES[k]; }
+  else P.nextCls = CLASSES[k] === (P.prim || P.cls) ? null : CLASSES[k];
+  if (!G.online && menu.loadout) menu.loadout[0] = k;
 }
 
 function onMatchEnd() {
   cv.classList.remove('playing');
+  unlockPointer();
   $('respawn').hidden = true;
   const P = G.player, w = G.winner;
   $('rematch').textContent = 'Rematch on this map'; $('toMenu').textContent = 'Main menu';
@@ -298,15 +412,43 @@ function onMatchEnd() {
   $('overTitle').style.color = w === -1 ? 'var(--fg)' : TEAMS[w].color;
   $('overText').textContent = (w === -1 ? '' : `${TEAMS[w].name} wins. `) + G.reason + '.';
   const tables = [0, 1].map(t => {
-    const rows = G.soldiers.filter(s => s.team === t).sort((a, b) => b.kills - a.kills)
+    const rows = G.soldiers.filter(s => s.team === t && !s.off).sort((a, b) => b.kills - a.kills)
       .map(s => `<tr><td>${s.isPlayer ? '<b>' + s.name + '</b>' : s.name}</td><td class="n">${s.kills}</td><td class="n">${s.deaths}</td><td class="n">${s.points}</td></tr>`).join('');
     return `<table><thead><tr><th style="color:${TEAMS[t].color}">${TEAMS[t].name} · ${G.teams[t].points} pts · ${G.stats.captures[t]} captures</th><th class="n">K</th><th class="n">D</th><th class="n">Pts</th></tr></thead><tbody>${rows}</tbody></table>`;
   });
   $('overStats').innerHTML = tables.join('');
   show('over');
+  hlOnOver();   // replay the match's best multi-kill first (killcam.js), then this screen
 }
 $('rematch').onclick = () => { if (G && G.online) NET.backToLobby(); else beginMatch(); };
 $('toMenu').onclick = () => { if (G && G.online) { NET.leave(); return; } G = null; show('menu'); };
+
+// ---------- recoil: every shot pushes your aim up (and a little sideways); you pull it back down with the mouse.
+// After you stop firing the aim drifts back part of the way (CFG.RECOIL_BACK) on its own.
+const RC = { lastMag: -1, cls: null, rec: 0, lastT: 0 };
+function recoilFrame(dt) {
+  const P = G && G.player;
+  if (!P || !P.alive || G.auto) { RC.lastMag = -1; RC.rec = 0; return; }
+  const now = performance.now() / 1000;
+  if (RC.cls === P.cls && RC.lastMag >= 0 && P.mag < RC.lastMag && !P.reloading && P.cls.recoil) {
+    const [up, side, drift] = P.cls.recoil, k = (P.ads || P.scoped ? 0.75 : 1) * (P.crouch ? 0.8 : 1);
+    for (let i = 0; i < Math.min(3, RC.lastMag - P.mag); i++) {
+      const u = up * k * (0.85 + Math.random() * 0.3);
+      look.pitch = clamp(look.pitch + u, -1.45, 1.45);
+      look.yaw += ((Math.random() - 0.5) * 2 * side + drift) * k;
+      RC.rec += u * CFG.RECOIL_BACK; RC.lastT = now;
+    }
+  }
+  RC.cls = P.cls; RC.lastMag = P.mag;
+  if (RC.rec > 0 && now - RC.lastT > 0.12) { const d = RC.rec * (1 - Math.exp(-dt * 7)); look.pitch -= d; RC.rec -= d; if (RC.rec < 1e-4) RC.rec = 0; }
+  // scope sway: through the sniper scope the aim itself drifts in a slow, uneven figure-eight (you have to time the
+  // shot or correct with the mouse). It builds up over half a second after scoping in; crouching halves it.
+  RC.swT = P.scoped ? Math.min(1, (RC.swT || 0) + dt / 0.5) : 0;
+  const amp = CFG.SCOPE_SWAY * RC.swT * (P.crouch ? 0.4 : 1), t = now;
+  const sx = amp * (Math.sin(t * 1.1) * 0.7 + Math.sin(t * 2.3 + 1.7) * 0.3), sy = amp * (Math.sin(t * 2.2 + 0.5) * 0.45 + Math.sin(t * 0.7 + 2.1) * 0.35);
+  look.yaw += sx - (RC.sx || 0); look.pitch = clamp(look.pitch + sy - (RC.sy || 0), -1.45, 1.45);
+  RC.sx = sx; RC.sy = sy;
+}
 
 // ---------- loop
 let last = performance.now(), acc = 0;
@@ -317,9 +459,21 @@ function frame(now) {
   else if (G && !G.paused && !G.over) {
     acc += dt * SPEED;
     let n = 0;
-    while (acc >= STEP && n < SPEED * 6 + 2) { update(STEP); acc -= STEP; n++; if (G.over) break; }
+    while (acc >= STEP && n < SPEED * 6 + 2) { feelSnapshot(); update(STEP); acc -= STEP; n++; if (G.over) break; }
     if (acc > STEP * 10) acc = 0;
+    feelInterpolate(clamp(acc / STEP, 0, 1));
+  } else if (G && !G.online) feelInterpolate(1);
+  if (G && G.player) {
+    const P = G.player;
+    if (lockFailed && !G.paused && !G.showMap && !G.over && mouse.x > 0) {
+      const ex = mouse.x / Math.max(1, VW);
+      if (ex < 0.06) look.yaw -= 2.2 * dt * (1 - ex / 0.06); else if (ex > 0.94) look.yaw += 2.2 * dt * ((ex - 0.94) / 0.06);
+    }
+    if (P.alive && !G.wasAlive) { look.yaw = P.angle; look.pitch = 0; }
+    G.wasAlive = P.alive;
   }
+  if (G && !G.paused) { recoilFrame(dt); kcRecord(dt); hlRecord(dt); kcUpdate(dt); }
+  finalCountdown();
   try { render(dt); } catch (e) { console.error(e); }
   if (G) updateRespawnDock();
   requestAnimationFrame(frame);

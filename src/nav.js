@@ -134,16 +134,65 @@ function forBlockersNear(m, x0, y0, x1, y1, fn) {
     }
   }
 }
-function solidAt(m, x, y) {
+// Solid at (x, y). With z (height above the local ground, e.g. a soldier's floor level) only solids at that height count.
+function solidAt(m, x, y, z) {
   const i = Math.floor(x / HC), j = Math.floor(y / HC);
   if (i < 0 || j < 0 || i >= HW || j >= HH) return null;
   const list = m.hash[j * HW + i];
-  for (let k = 0; k < list.length; k++) { const o = list[k]; if (!o.water && !o.window && pointInShape(o, x, y)) return o; }
+  for (let k = 0; k < list.length; k++) {
+    const o = list[k];
+    if (o.water || o.window || !pointInShape(o, x, y)) continue;
+    if (z !== undefined ? (z + 6 < o.z0 || z + 6 > o.z1) : o.up) continue;
+    return o;
+  }
   return null;
 }
+// What a bullet or a line of sight at absolute height z hits at (x, y): a solid, 'ground', or null.
+function blockedAt(m, x, y, z) {
+  if (z < elevAt(m, x, y) - 1) return 'ground';
+  if (!m.shotAny[((y / CELL) | 0) * GW + ((x / CELL) | 0)]) return null;
+  const i = Math.floor(x / HC), j = Math.floor(y / HC);
+  const list = m.hash[j * HW + i];
+  for (let k = 0; k < list.length; k++) {
+    const o = list[k];
+    if (o.water || !pointInShape(o, x, y)) continue;
+    const rz = z - o.gz;
+    if (rz < o.z0 - 2 || rz > o.z1) continue;
+    if (o.window && rz > o.z0 + WIN_LO && rz < o.z0 + WIN_HI) continue;
+    return o;
+  }
+  return null;
+}
+// Floors and roofs of houses: does a line between heights za and zb at (x, y) pass through one?
+function slabBetween(m, x, y, za, zb) {
+  const f = houseAt(m, x, y);
+  if (!f) return null;
+  const lo = Math.min(za, zb), hi = Math.max(za, zb);
+  const roof = f.base + f.stories * CFG.FLOOR_H;
+  if (lo < roof && hi >= roof) return f;
+  if (f.stories === 2) {
+    const mid = f.base + CFG.FLOOR_H;
+    if (lo < mid && hi >= mid && !inStair(f.stair, x, y)) return f;
+  }
+  return null;
+}
+// Line of sight between two points in 3D (absolute heights): terrain, solids at the right height, floors and roofs.
+function los3(m, x0, y0, z0, x1, y1, z1) {
+  const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy);
+  const n = Math.max(1, Math.ceil(len / 12));
+  let pz = z0;
+  for (let k = 1; k < n; k++) {
+    const t = k / n, x = x0 + dx * t, y = y0 + dy * t, z = z0 + (z1 - z0) * t;
+    if (blockedAt(m, x, y, z) || slabBetween(m, x, y, pz, z)) return false;
+    pz = z;
+  }
+  return true;
+}
 
-function collideCircle(m, s, R) {
+function collideCircle(m, s, R, zOver) {
+  const z = zOver ?? (s.z || 0);
   forBlockersNear(m, s.x - R, s.y - R, s.x + R, s.y + R, o => {
+    if (o.z0 !== undefined && !o.water && (z + CFG.BODY_H < o.z0 + 2 || z + 6 > o.z1)) return;   // not at this height
     if (o.t === 'c') {
       const dx = s.x - o.x, dy = s.y - o.y, d = Math.hypot(dx, dy), min = o.r + R;
       if (d < min) {

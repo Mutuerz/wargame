@@ -5,9 +5,9 @@ const { createSim } = require('./sim');
 const TICK = 1 / 60;           // simulation step (same as the offline game)
 const SEND_EVERY = 3;          // snapshots at 20 Hz
 const ROSTER_EVERY = 30;       // scoreboard twice a second
-const LOBBY_AFTER = 25;        // seconds on the result screen before the room returns to the lobby
+const LOBBY_AFTER = 40;        // seconds on the result screen before the room returns to the lobby
 const BIOMES = ['forest', 'desert', 'urban', 'snow', 'swamp'];
-const CLASSES = ['rifleman', 'sniper', 'smg', 'lmg'];
+const CLASSES = ['rifleman', 'sniper', 'smg', 'lmg', 'shotgun'];
 const MAX_PLAYERS = 20;
 
 class Room {
@@ -17,7 +17,7 @@ class Room {
     this.clients = new Set();
     this.host = null;
     this.state = 'lobby';
-    this.settings = { biome: 'forest', seed: Math.floor(Math.random() * 1e6), skill: 1 };
+    this.settings = { biome: 'forest', seed: Math.floor(Math.random() * 1e6), skill: 1, bots: 10 };   // bots: per team, humans come on top (10 max per team)
     this.sim = null;
     this.timer = null;
     this.tickN = 0;
@@ -85,6 +85,7 @@ class Room {
         if (BIOMES.includes(msg.biome)) this.settings.biome = msg.biome;
         if (Number.isFinite(msg.seed)) this.settings.seed = Math.abs(Math.floor(msg.seed)) % 1e8;
         if ([0, 1, 2].includes(msg.skill)) this.settings.skill = msg.skill;
+        if (Number.isInteger(msg.bots) && msg.bots >= 0 && msg.bots <= 10) this.settings.bots = msg.bots;
         this.broadcastLobby();
         break;
       case 'start':
@@ -106,6 +107,8 @@ class Room {
     this.state = 'play';
     this.tickN = 0;
     for (const c of this.clients) { c.sid = -1; this.enterMatch(c); }
+    this.sim.setBots(this.settings.bots);
+    for (const c of this.clients) c.send({ t: 'roster', roster: this.sim.roster() });
     this.broadcastLobby();
     this.last = process.hrtime.bigint();
     this.acc = 0;

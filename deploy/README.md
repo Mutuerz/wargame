@@ -1,7 +1,7 @@
 # Running the Bridgehead online server
 
 The server runs the real match (the same simulation as the offline game) and the browsers only send
-keys and draw what the server says. Bots fill every slot that no person is playing, so a match is always 10 v 10.
+keys and draw what the server says. The host picks how many bots join each team (0 to 10, default 10 = fill every free slot).
 
 These steps are for the free Oracle Cloud VM (Ubuntu 24.04, shape VM.Standard.A1.Flex) in Bogotá,
 but `setup.sh` works on any Ubuntu 24.04 machine with a public IP.

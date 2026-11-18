@@ -11,13 +11,14 @@
 <link rel="stylesheet" href="src/style.css">
 </head>
 <body>
+<canvas id="view"></canvas>
 <canvas id="game"></canvas>
 
 <section id="menu" class="overlay">
   <div class="card menu-card">
     <header class="brand">
       <h1>BRIDGEHEAD</h1>
-      <p>Ten against ten, seen from above. Hold all five points at the same time to win.</p>
+      <p>Ten against ten in first person. Hold all five sectors at the same time to win.</p>
     </header>
     <div class="menu-grid">
       <div class="menu-col">
@@ -43,12 +44,12 @@
         <ul class="legend">
           <li><i class="dot blue"></i>Your base (west)</li>
           <li><i class="dot red"></i>Enemy base (east)</li>
-          <li><i class="dot gold"></i>Capture points A to E</li>
+          <li><i class="dot gold"></i>Sectors A to E (flag and borders)</li>
           <li><i class="sq"></i>Bridge and supply depot</li>
         </ul>
       </div>
     </div>
-    <p class="controls"><b>WASD</b> move · <b>Mouse</b> aim · <b>Left click</b> fire · <b>R</b> reload · <b>Shift</b> sprint · <b>G</b> throw grenade · <b>Right click</b> or <b>Q</b> scope (snipers) · <b>F</b> hold to plant or defuse C4 · <b>B</b> air strike (500 pts) · <b>M</b> map · <b>Tab</b> scores · <b>P</b> perks · <b>Esc</b> pause · <b>N</b> mute</p>
+    <p class="controls"><b>Click</b> to capture the mouse · <b>WASD</b> move · <b>Mouse</b> look · <b>Left click</b> fire · <b>R</b> reload · <b>Shift</b> sprint · <b>G</b> throw grenade where you look · <b>Right click</b> or <b>Q</b> aim down the sights (scope for snipers) · <b>Ctrl</b> or <b>C</b> crouch · <b>Space</b> jump, or vault low cover and windows · <b>1</b>/<b>2</b> main weapon / sidearm · <b>F</b> hold to plant or defuse C4 · <b>B</b> air strike (500 pts) · <b>M</b> map · <b>Tab</b> scores · <b>P</b> perks · <b>Esc</b> pause · <b>N</b> mute</p>
   </div>
 </section>
 
@@ -92,7 +93,7 @@
         <h2 class="eyebrow">Online</h2>
         <h1 id="netTitle">Play with friends</h1>
       </div>
-      <p>Everyone who types the same room code plays in the same match. Bots fill every empty slot, so a match is always 10 against 10.</p>
+      <p>Everyone who types the same room code plays in the same match. The host sets how many bots join each team (up to 10 per side in total).</p>
     </header>
     <div id="netJoin" class="net-form">
       <label>Your name <input id="netName" maxlength="16" autocomplete="nickname"></label>
@@ -116,6 +117,7 @@
       <div id="netHostBox" class="net-controls">
         <label>Theatre <select id="netBiome"></select></label>
         <label>Map seed <input id="netSeed" type="number" min="0" max="99999999"></label>
+        <label>Bots per team <select id="netBots"></select></label>
         <label>Bot skill <select id="netSkill"><option value="0">Recruit</option><option value="1">Veteran</option><option value="2">Elite</option></select></label>
       </div>
       <p id="netRoomInfo" class="net-status" role="status"></p>
@@ -130,6 +132,7 @@
 <section id="respawn" class="dock" hidden>
   <div class="card dock-card">
     <p id="respawnText"></p>
+    <div id="respawnOpts" aria-label="Weapon for your next life"></div>
   </div>
 </section>
 
@@ -183,8 +186,16 @@
 <script src="src/perks.js"></script>
 <script src="src/game.js"></script>
 <script src="src/bots.js"></script>
+<script src="src/vendor/three.min.js"></script>
+<script src="src/vendor/three-post.min.js"></script>
+<script src="src/render3d.js"></script>
+<script src="src/viewmodel.js"></script>
 <script src="src/render.js"></script>
 <script src="src/ui.js"></script>
 <script src="src/net.js"></script>
+<script src="src/feel.js"></script>
+<script src="src/killcam.js"></script>
+<script src="src/post.js"></script>
+<script src="src/surface.js"></script>
 </body>
 </html>
