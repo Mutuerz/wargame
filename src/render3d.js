@@ -526,9 +526,16 @@ const GUN_SPEC = {   // length, height, barrel length, magazine height, stock le
   lmg: { L: 25, H: 4.6, B: 11, mag: 0, stock: 9, box: true, bipod: true },
   shotgun: { L: 16, H: 3.6, B: 13, mag: 0, stock: 9, pump: true },
   pistol: { L: 9, H: 3.4, B: 2, mag: 5, stock: 0 },
+  knife: { L: 8, H: 1.2, B: 0, mag: 0, stock: 0, blade: true },
 };
 function gunMesh(clsKey, material) {
   const g = new THREE.Group(), sp = GUN_SPEC[clsKey] || GUN_SPEC.rifleman;
+  if (sp.blade) {   // knife: grip and blade
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(3.4, 1.4, 1.4), lam('#1d1f1c')); grip.position.set(0, 0, 0); g.add(grip);
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(5.5, 1.1, 0.3), lam('#9aa0a4', { emissive: '#1c1e20' })); blade.position.set(4.4, 0.1, 0); g.add(blade);
+    g.traverse(n => { if (n.isMesh) n.castShadow = true; });
+    return g;
+  }
   const metal = lam('#3e423f'), wood = clsKey === 'sniper' || clsKey === 'shotgun' ? lam('#5a4330') : material;
   const add = (geo, m, x, y, z, rz = 0) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.rotation.z = rz; g.add(o); return o; };
   add(new THREE.BoxGeometry(sp.L, sp.H, 3), material, sp.L / 2 - 2, 0, 0);                                 // receiver
@@ -1283,6 +1290,9 @@ function render3d(dt) {
   else if (v.fp && !v.dead && !v.who && !G.auto && !(P.scoped && R3.zoom > 1.5)) {
     if (!R3.vm || R3.vmCls !== P.cls.key || R3.vmTeam !== P.team) { buildViewModel(P.cls.key); R3.lastMag = P.mag; }
     const vm = R3.vm;
+    if (P.cls.melee && mouse.down && P.alive && !G.paused && !G.showMap && G.time - (R3.stabT ?? -9) >= 1 / P.cls.rate && !(Math.hypot(P.vx, P.vy) > CFG.WALK * 1.15 && keys.has('ShiftLeft'))) {
+      R3.stabT = G.time; SFX.knife();   // the swing (the server or the sim decides the hit)
+    }
     if (P.mag < R3.lastMag && !P.reloading) { R3.kick = Math.min(1.2, R3.kick + (P.cls.key === 'sniper' ? 1.2 : P.cls.key === 'shotgun' ? 1.0 : 0.45)); R3.lastShotT = G.time; feelShot(P); }
     R3.lastMag = P.mag;
     const moving = Math.hypot(P.vx, P.vy) > 20, sprint = moving && Math.hypot(P.vx, P.vy) > CFG.WALK * 1.15;
@@ -1295,8 +1305,13 @@ function render3d(dt) {
         vm.position.set(lerp(0.12 + bx + (sprint ? 0.03 : 0), 0, ad), lerp(-0.11 - by + (sprint ? -0.02 : 0), -(R3.vmSpec?.sight ?? 0.207) * 0.3, ad) - rl * 0.1, lerp(-0.2, -0.17, ad) + R3.kick * 0.03 * (1 - ad * 0.5));
     vm.rotation.set(R3.kick * 0.08 * (1 - ad * 0.6) + rl * 0.5 + (sprint ? -0.35 : 0), (sprint ? 0.5 : 0.04) * (1 - ad), rl * 0.6);
     }
+    if (P.cls.melee) {   // knife swing: a quick thrust forward and a slash across, then back
+      const st = G.time - (R3.stabT ?? -9), k = st >= 0 && st < 0.32 ? Math.sin(st / 0.32 * Math.PI) : 0;
+      vm.position.x -= 0.03 + 0.07 * k; vm.position.y += 0.055 + 0.02 * k; vm.position.z -= 0.09 * k; vm.rotation.x += 0.25;   // held up in view, tip raised
+      vm.rotation.x -= 0.35 * k; vm.rotation.y += 0.6 * k; vm.rotation.z += 0.5 * k;
+    }
     const fl = vm.getObjectByName('flash');
-    fl.visible = G.time - R3.lastShotT < 0.05; fl.material.rotation = Math.random() * TAU;
+    fl.visible = !P.cls.melee && G.time - R3.lastShotT < 0.05; fl.material.rotation = Math.random() * TAU;
     animateViewModel();
     gl3.autoClear = false;
     gl3.clearDepth();

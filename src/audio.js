@@ -77,6 +77,7 @@ const SFX = {
   loadClip(key, url) {
     fetch(url).then(r => (r.ok ? r.arrayBuffer() : null)).then(b => b && this.ctx.decodeAudioData(b)).then(buf => { if (buf) this[key] = buf; }).catch(() => {});
   },
+  knife() { if (this.ok()) { this.tone(0.12, 1400, 500, 0.09, 'sawtooth'); } },   // swing whoosh
   // end-of-match music under the best-play replay; stops if the replay is skipped
   bestPlay() {
     this.bestStop();

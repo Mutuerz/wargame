@@ -20,12 +20,12 @@ function maxHp(s) { return CFG.HP * s.mods.maxHp; }
 function ammoTotal(s) { return s.mag + s.mags.reduce((a, b) => a + b, 0); }
 function ammoFull(s) { return s.cls.mag * (s.cls.mags + 1); }
 function refillAmmo(s) { s.mag = s.cls.mag; s.mags = Array(s.cls.mags).fill(s.cls.mag); s.reloading = false; s.stash = {}; }
-// 1 = main weapon, 2 = sidearm. Each keeps its own ammo; an empty stash means full magazines.
+// slot 0 = main weapon, 1 = sidearm, 2 = knife (keys 1/2/3). Each keeps its own ammo; an empty stash means full magazines.
 function switchWeapon(s, slot) {
   if (!s.alive || s.riding || (s.slot || 0) === slot || !s.prim || s.vault) return false;
   s.stash = s.stash || {};
   s.stash[s.slot || 0] = { mag: s.mag, mags: s.mags };
-  s.slot = slot; s.cls = slot ? SIDEARM : s.prim;
+  s.slot = slot; s.cls = slot === 2 ? KNIFE : slot ? SIDEARM : s.prim;
   const st = s.stash[slot];
   if (st) { s.mag = st.mag; s.mags = st.mags; } else { s.mag = s.cls.mag; s.mags = Array(s.cls.mags).fill(s.cls.mag); }
   s.reloading = false; s.scoped = false; s.heat = 0; s.fireCD = Math.max(s.fireCD, CFG.SWITCH_T);
@@ -140,6 +140,21 @@ function finishReload(s) {
   s.mags.sort((a, b) => b - a);
   s.mag = s.mags.shift() || 0;
   s.mags = s.mags.filter(x => x > 0);
+}
+// knife: the nearest enemy within reach (CFG.R + KNIFE.range) and within ~40 degrees of where you face, at about
+// the same height, dies. No ammo, no bullets; the swing itself is drawn by the viewmodel.
+function stab(s) {
+  s.lastShotT = G.time; s.fireCD = 1 / s.cls.rate; s.steady = false; s.steadyT = 0;
+  const reach = CFG.R * 2 + s.cls.range, fz = feetZ(s);
+  let best = null, bd = reach;
+  for (const t of G.soldiers) {
+    if (t === s || !t.alive || t.team === s.team || t.riding || t.para > 0) continue;
+    const d = Math.hypot(t.x - s.x, t.y - s.y);
+    if (d > bd || Math.abs(feetZ(t) - fz) > 30) continue;
+    if (Math.abs(angDiff(s.angle, Math.atan2(t.y - s.y, t.x - s.x))) > 0.7 && d > CFG.R * 2) continue;
+    best = t; bd = d;
+  }
+  if (best) damage(best, s.cls.dmg, s, false);
 }
 function shoot(s, moving) {
   const spread = currentSpread(s, moving);
@@ -302,7 +317,7 @@ function kill(s, killer, head) {
 // Every gun but the sniper aims down the sights (tighter aim, slower walk); the sniper's right click is the scope,
 // which needs you to stand still. Shared with the online prediction.
 function aimStep(s, held, moving, dt) {
-  const want = !!(held && !s.reloading && !(s.cls.scopeRange && moving));
+  const want = !!(held && !s.reloading && !s.cls.melee && !(s.cls.scopeRange && moving));
   s.aimT = want ? (s.aimT || 0) + dt : 0;
   s.aimP = clamp(s.aimT / (s.cls.scopeRange ? CFG.SCOPE_DELAY : CFG.ADS_DELAY), 0, 1);
   s.scoped = want && !!s.cls.scopeRange && s.aimP >= 1;
@@ -393,6 +408,7 @@ function updateSoldier(s, dt, ctl) {
   s.fireCD -= dt;
   if (fire && !sprint && !busy) {
     if (s.reloading) { /* wait */ }
+    else if (s.cls.melee) { if (s.fireCD <= 0) stab(s); }
     else if (s.mag > 0) { if (s.fireCD <= 0) shoot(s, moving); }
     else if (!startReload(s) && s.isPlayer && s.fireCD <= 0) { SFX.click(); s.fireCD = 0.3; }
   }

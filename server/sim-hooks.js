@@ -156,7 +156,7 @@ const SIM = {
     if (a.a === 'reload') s.human.reload = true;
     else if (a.a === 'throw') s.human.throwAt = { x: clamp(n(a.x), 0, W), y: clamp(n(a.y), 0, H) };
     else if (a.a === 'dismount' && s.riding) dismount(s.riding, s);
-    else if (a.a === 'slot') switchWeapon(s, a.n === 1 ? 1 : 0);
+    else if (a.a === 'slot') switchWeapon(s, a.n === 1 || a.n === 2 ? a.n : 0);
     else if (a.a === 'strike') { if (callStrike(s.team, n(a.x), n(a.y))) { const st = G.strikes[G.strikes.length - 1]; if (st) st.caller = s; } }
   },
   step(dt) {

@@ -192,7 +192,7 @@ const NET = {
     const P = G.player;
     P.hp = me.hp; P.mag = me.mag; P.mags = me.mags; P.nades = me.nades; P.c4 = me.c4;
     P.reloading = !!me.rl; P.reloadT = me.rlT; P.reloadMax = me.rlM || 1; P.act = me.act; P.actT = me.actT;
-    P.points = me.pts; P.shield = me.sh; P.cls = weaponByKey(me.cls) || P.cls; P.prim = CLASSES[me.pr] || P.prim; P.slot = P.cls === SIDEARM ? 1 : 0;
+    P.points = me.pts; P.shield = me.sh; P.cls = weaponByKey(me.cls) || P.cls; P.prim = CLASSES[me.pr] || P.prim; P.slot = P.cls === KNIFE ? 2 : P.cls === SIDEARM ? 1 : 0;
     if (performance.now() - (this.shotAt || 0) > 400) P.steady = !!me.st;   // a local shot wins until the server catches up
     if (P.reloading && !this.wasReloading) SFX.reload();
     this.wasReloading = P.reloading;

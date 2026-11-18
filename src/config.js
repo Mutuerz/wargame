@@ -148,7 +148,12 @@ const SIDEARM = {
   bulletSpeed: 1950, range: 780, spread: 0.025, spreadMove: 0.035, speed: 1, vision: 1300, auto: true, recoil: [0.021, 0.0135, 0.0],
   falloff: [200, 700, 0.6],
 };
-const weaponByKey = k => CLASSES[k] || (k === SIDEARM.key ? SIDEARM : null);
+// slot 3: a knife. One stab kills anyone in reach in front of you; you run a little faster holding it.
+const KNIFE = {
+  key: 'knife', name: 'Knife', melee: true, mag: 1, mags: 0, rate: 1.8, reload: 0, reloadEmpty: 0, dmg: 999,
+  bulletSpeed: 1, range: 44, spread: 0, spreadMove: 0, speed: 1.1, vision: 1300, auto: true, recoil: [0, 0, 0],
+};
+const weaponByKey = k => CLASSES[k] || (k === SIDEARM.key ? SIDEARM : k === KNIFE.key ? KNIFE : null);
 const WEAPON_BLURB = {
   rifleman: 'Assault rifle · 25 rds · all-round',
   sniper: 'Bolt sniper · 5 rds · scope, 75 dmg',

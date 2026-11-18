@@ -170,25 +170,30 @@ function drawHUD() {
   ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(24, by + 28, 160, 10);
   ctx.fillStyle = hpF > 0.5 ? '#7fd18b' : hpF > 0.25 ? '#e6ad45' : '#ff5a4e'; ctx.fillRect(24, by + 28, 160 * hpF, 10);
   txt(String(Math.ceil(P.hp)), 192, by + 38, `600 14px ${M}`, '#fff');
-  txt(String(P.mag), 24, by + 82, `700 40px ${D}`, P.mag === 0 ? '#ff5a4e' : '#fff');
-  txt(`/ ${P.cls.mag}`, 78, by + 82, `500 14px ${M}`, '#8e9b92');
-  // magazines
-  for (let i = 0; i < Math.max(P.cls.mags, P.mags.length); i++) {
-    const mx = 128 + i * 18, my = by + 52;
-    ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1; ctx.strokeRect(mx + 0.5, my + 0.5, 12, 30);
-    const r = P.mags[i] || 0;
-    if (r > 0) { ctx.fillStyle = '#e6ad45'; const hh = 28 * r / P.cls.mag; ctx.fillRect(mx + 2, my + 2 + 28 - hh, 9, hh); }
+  if (P.cls.melee) {   // knife: no ammo to show
+    txt('KNIFE', 24, by + 82, `700 34px ${D}`, '#fff');
+    txt('Left click: stab (one hit kills)', 128, by + 70, `600 11px ${D}`, '#8e9b92');
+  } else {
+    txt(String(P.mag), 24, by + 82, `700 40px ${D}`, P.mag === 0 ? '#ff5a4e' : '#fff');
+    txt(`/ ${P.cls.mag}`, 78, by + 82, `500 14px ${M}`, '#8e9b92');
+    // magazines
+    for (let i = 0; i < Math.max(P.cls.mags, P.mags.length); i++) {
+      const mx = 128 + i * 18, my = by + 52;
+      ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1; ctx.strokeRect(mx + 0.5, my + 0.5, 12, 30);
+      const r = P.mags[i] || 0;
+      if (r > 0) { ctx.fillStyle = '#e6ad45'; const hh = 28 * r / P.cls.mag; ctx.fillRect(mx + 2, my + 2 + 28 - hh, 9, hh); }
+    }
+    txt('MAGS', 128, by + 48, `600 10px ${D}`, '#8e9b92');
+    if (P.reloading) {
+      txt('RELOADING', 196, by + 64, `600 11px ${D}`, '#e6ad45');
+      ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(196, by + 70, 100, 6);
+      ctx.fillStyle = '#e6ad45'; ctx.fillRect(196, by + 70, 100 * (1 - P.reloadT / P.reloadMax), 6);
+    } else if (P.mag === 0 && !P.mags.length) txt('OUT OF AMMO', 196, by + 70, `600 11px ${D}`, '#ff5a4e');
+    else if (P.mag < 8 && P.mags.length) txt('R  RELOAD', 196, by + 70, `600 11px ${D}`, '#e6ad45');
   }
-  txt('MAGS', 128, by + 48, `600 10px ${D}`, '#8e9b92');
-  if (P.reloading) {
-    txt('RELOADING', 196, by + 64, `600 11px ${D}`, '#e6ad45');
-    ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(196, by + 70, 100, 6);
-    ctx.fillStyle = '#e6ad45'; ctx.fillRect(196, by + 70, 100 * (1 - P.reloadT / P.reloadMax), 6);
-  } else if (P.mag === 0 && !P.mags.length) txt('OUT OF AMMO', 196, by + 70, `600 11px ${D}`, '#ff5a4e');
-  else if (P.mag < 8 && P.mags.length) txt('R  RELOAD', 196, by + 70, `600 11px ${D}`, '#e6ad45');
   txt(`C4 ×${P.c4}`, 196, by + 90, `600 12px ${M}`, P.c4 ? '#e6ad45' : '#5d665f');
   txt(`G ×${P.nades}`, 250, by + 90, `600 12px ${M}`, P.nades ? '#e6ad45' : '#5d665f');
-  txt(`${P.slot ? 2 : 1} · ` + P.cls.name.toUpperCase() + (P.scoped ? '  · SCOPED' : P.ads ? '  · AIMING' : '') + (P.crouch ? '  · CROUCHED' : '') + (P.para > 0 ? `  · PARACHUTE ${Math.ceil(P.para / 20)} m` : ''), 24, by - 8, `700 12px ${D}`, P.scoped ? '#e6ad45' : '#cfd5cc');
+  txt(`${(P.slot || 0) + 1} · ` + P.cls.name.toUpperCase() + (P.scoped ? '  · SCOPED' : P.ads ? '  · AIMING' : '') + (P.crouch ? '  · CROUCHED' : '') + (P.para > 0 ? `  · PARACHUTE ${Math.ceil(P.para / 20)} m` : ''), 24, by - 8, `700 12px ${D}`, P.scoped ? '#e6ad45' : '#cfd5cc');
   if (P.alive) {
     const sf = slopeFactor(P);
     if (sf < 1) txt('▼ DOWNHILL  aim +10%', 312, by - 8, `600 12px ${D}`, '#7fd18b', 'right');

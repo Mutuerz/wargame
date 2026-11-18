@@ -290,6 +290,15 @@ function vmPistol(g, M) {
   return { muzzle: -0.32, hand: [0.02, -0.02], cup: true, mag: [0.03, -0.11] };
 }
 
+function vmKnife(g, M) {
+  // combat knife: rubber grip, steel guard, a clip-point blade held edge down, pointing forward
+  vmProfile(g, [[0.035, 0.07], [-0.02, 0.07], [-0.012, -0.075], [0.0, -0.085], [0.05, -0.085], [0.05, -0.02], [0.04, 0.07]], 0.036, M.rubber);
+  vmBox(g, 0.06, 0.016, 0.026, M.steel, 0, 0.078, -0.005);
+  vmProfile(g, [[0.0, 0.086], [-0.2, 0.086], [-0.29, 0.1], [-0.24, 0.125], [-0.1, 0.13], [0.0, 0.13]], 0.01, M.steel, 0, 0.003);
+  vmBox(g, 0.004, 0.006, 0.17, M.dark, 0, 0.122, -0.09);   // fuller groove along the spine
+  return { muzzle: -0.3, hand: [0.02, -0.02], noLeft: true };
+}
+
 // Hands and sleeves -----------------------------------------------------------------------------------------
 function vmHand(M, left) {
   const h = new THREE.Group();
@@ -324,16 +333,16 @@ function buildViewModel(clsKey, team = G.player.team) {
   if (R3.vm) { vmScene.remove(R3.vm); R3.vm.traverse(n => { if (n.geometry) n.geometry.dispose(); }); }
   const M = VMX.mats, g = new THREE.Group();
   const sleeveM = new THREE.MeshStandardMaterial({ color: new THREE.Color('#4a4f40').lerp(new THREE.Color(TEAMS[team].dark), 0.35), metalness: 0, roughness: 0.95, bumpMap: VMX.fabric, bumpScale: 0.004 });
-  const spec = (clsKey === 'sniper' ? vmSniper : clsKey === 'smg' ? vmSmg : clsKey === 'lmg' ? vmLmg : clsKey === 'shotgun' ? vmShotgun : clsKey === 'pistol' ? vmPistol : vmRifle)(g, M);
+  const spec = (clsKey === 'sniper' ? vmSniper : clsKey === 'smg' ? vmSmg : clsKey === 'lmg' ? vmLmg : clsKey === 'shotgun' ? vmShotgun : clsKey === 'pistol' ? vmPistol : clsKey === 'knife' ? vmKnife : vmRifle)(g, M);
   const handR = vmHand(M, false); handR.position.set(0.0, -0.05, 0.03); handR.rotation.set(-0.35, 0, 0); g.add(handR);
   const handL = vmHand(M, true);
   if (spec.cup) { handL.position.set(-0.045, -0.03, 0.02); handL.rotation.set(-0.3, 0.2, -0.2); }   // support hand wraps the grip
   else if (spec.vgrip) { handL.position.set(-0.01, spec.hand[1] - 0.04, spec.hand[0]); handL.rotation.set(-0.2, 0, 0); }
   else { handL.position.set(-0.012, spec.hand[1] - 0.045, spec.hand[0]); handL.rotation.set(0, 0, -0.35); }
-  (spec.pump ? g.getObjectByName('pump') : g).add(handL);
+  if (!spec.noLeft) (spec.pump ? g.getObjectByName('pump') : g).add(handL);
   vmSleeve(g, sleeveM, 0.03, -0.1, 0.08, 0.35, 0.05);
   if (spec.cup) vmSleeve(g, sleeveM, -0.08, -0.08, 0.1, 0.3, -0.35);
-  else vmSleeve(spec.pump ? g.getObjectByName('pump') : g, sleeveM, -0.07, spec.hand[1] - 0.04, spec.hand[0] + 0.07, 0.25, 0.5);
+  else if (!spec.noLeft) vmSleeve(spec.pump ? g.getObjectByName('pump') : g, sleeveM, -0.07, spec.hand[1] - 0.04, spec.hand[0] + 0.07, 0.25, 0.5);
   const flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: DOT, color: '#ffd27a', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
   flash.scale.set(0.35, 0.35, 1); flash.position.set(0, clsKey === 'sniper' ? 0.135 : clsKey === 'shotgun' ? 0.145 : clsKey === 'pistol' ? 0.14 : 0.12, spec.muzzle - 0.06); flash.visible = false; flash.name = 'flash';
   g.add(flash);
