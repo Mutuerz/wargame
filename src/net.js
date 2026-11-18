@@ -223,6 +223,7 @@ const NET = {
     if (k === 'b') {
       const [, x, y, vx, vy, life, team, sniper, owner, z, vz] = e;
       G.bullets.push({ x, y, z: z || 0, vx, vy, vz: vz || 0, life, team, sniper: sniper === 1, pel: sniper >= 2, mine: owner === P.id });
+      if (sniper !== 3) { const os = G.soldiers.find(q => q.id === owner); if (os) os.lastShotT = G.time; }
       if (sniper === 3) return;   // extra shotgun pellets: one flash and one bang per shot
       G.particles.push({ type: 'flash', x, y, z: z || undefined, a: Math.atan2(vy, vx), life: sniper === 1 ? 0.14 : 0.05, max: sniper === 1 ? 0.14 : 0.05, big: sniper === 1 });
       if (Math.random() < 0.5) { const a = Math.atan2(vy, vx); stampCasing(G.art, x - Math.cos(a) * 26 + Math.cos(a + 1.6) * 16, y - Math.sin(a) * 26 + Math.sin(a + 1.6) * 16); }

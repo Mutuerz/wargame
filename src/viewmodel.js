@@ -149,8 +149,10 @@ function vmRifle(g, M) {
   vmRedDot(g, M, -0.13, 0.17, true);
   vmGrip(g, M); vmTrigger(g, M, 0.0);
   // curved magazine
+  { const m0 = g.children.length;
   vmProfile(g, [[-0.215, 0.03], [-0.125, 0.03], [-0.12, -0.06], [-0.135, -0.15], [-0.16, -0.23], [-0.25, -0.22], [-0.225, -0.14], [-0.215, -0.06]], 0.05, M.poly);
   for (let i = 0; i < 4; i++) vmBox(g, 0.054, 0.004, 0.085, M.poly, 0, -0.04 - i * 0.04, -0.17 - i * 0.007);
+  vmMagGroup(g, m0); }
   // buffer tube and adjustable stock
   vmCyl(g, 0.022, 0.24, M.anod, 0, 0.12, 0.17, 14);
   vmProfile(g, [[0.12, 0.14], [0.34, 0.14], [0.35, 0.0], [0.3, 0.0], [0.24, 0.07], [0.14, 0.09]], 0.06, M.poly);
@@ -179,7 +181,9 @@ function vmSniper(g, M) {
   const lensF = vmCyl(g, 0.038, 0.004, M.lens, 0, VM_SIGHT, -0.497, 24); const lensR = vmCyl(g, 0.028, 0.004, M.lens, 0, VM_SIGHT, 0.162, 24);
   const tt = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.03, 16), M.knurl); tt.position.set(0, VM_SIGHT + 0.035, -0.15); g.add(tt);
   const ts = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.03, 16).rotateZ(Math.PI / 2), M.knurl); ts.position.set(0.035, VM_SIGHT, -0.15); g.add(ts);
+  { const m0 = g.children.length;
   vmBox(g, 0.04, 0.05, 0.07, M.poly, 0, 0.03, -0.12);                    // magazine
+  vmMagGroup(g, m0); }
   vmTrigger(g, M, 0.02);
   // folded bipod
   for (const s of [1, -1]) vmBox(g, 0.008, 0.008, 0.2, M.blued, s * 0.02, 0.06, -0.55);
@@ -196,8 +200,10 @@ function vmSmg(g, M) {
   vmRedDot(g, M, -0.1, 0.17, false);
   vmIronFront(g, M, -0.27, 0.165);
   vmGrip(g, M); vmTrigger(g, M, 0.03);
+  { const m0 = g.children.length;
   vmProfile(g, [[-0.15, 0.03], [-0.1, 0.03], [-0.095, -0.24], [-0.155, -0.24]], 0.04, M.poly);   // straight magazine
   vmBox(g, 0.046, 0.016, 0.07, M.poly, 0, -0.245, -0.125);
+  vmMagGroup(g, m0); }
   // folding wire stock
   for (const s of [1, -1]) vmBox(g, 0.008, 0.008, 0.26, M.blued, s * 0.022, 0.1, 0.18);
   vmBox(g, 0.06, 0.12, 0.018, M.rubber, 0, 0.06, 0.31);
@@ -219,8 +225,10 @@ function vmLmg(g, M) {
   vmIronRear(g, M, -0.02, 0.2);
   vmGrip(g, M); vmTrigger(g, M, 0.04);
   // ammo box and belt
+  { const m0 = g.children.length;
   vmProfile(g, [[-0.28, 0.06], [-0.1, 0.06], [-0.1, -0.12], [-0.28, -0.12]], 0.1, M.tan, -0.07);
   vmBox(g, 0.004, 0.06, 0.12, M.dark, -0.121, -0.03, -0.19);
+  vmMagGroup(g, m0); }
   for (let i = 0; i < 6; i++) { const b = vmCyl(g, 0.006, 0.05, M.brass, -0.03, 0.08 + i * 0.012, -0.22, 8); b.rotation.set(0, Math.PI / 2, 0); }
   // stock and bipod
   vmProfile(g, [[0.08, 0.16], [0.36, 0.14], [0.37, -0.02], [0.3, -0.02], [0.2, 0.06], [0.08, 0.05]], 0.07, M.poly);
@@ -270,8 +278,10 @@ function vmPistol(g, M) {
   for (let i = 0; i < 3; i++) vmBox(g, 0.05, 0.006, 0.01, M.poly, 0, 0.078, -0.13 - i * 0.03);
   vmProfile(g, [[0.03, 0.065], [-0.025, 0.065], [-0.005, -0.03], [0.0, -0.08], [0.06, -0.08], [0.05, -0.02], [0.045, 0.06]], 0.05, M.poly);   // grip
   vmBox(g, 0.052, 0.06, 0.04, M.rubber, 0, 0.0, 0.03, -0.2);
+  { const m0 = g.children.length;
   vmProfile(g, [[0.0, -0.075], [0.05, -0.075], [0.06, -0.15], [0.005, -0.15]], 0.042, M.blued);   // extended magazine
   vmBox(g, 0.046, 0.016, 0.065, M.poly, 0, -0.155, 0.03);
+  vmMagGroup(g, m0); }
   vmTrigger(g, M, -0.03);
   vmBox(g, 0.006, 0.014, 0.02, M.steel, 0.027, 0.09, 0.0);               // fire selector
   return { muzzle: -0.32, hand: [0.02, -0.02], cup: true, mag: [0.03, -0.11] };
@@ -298,6 +308,13 @@ function vmSleeve(g, mat, x, y, z, rx, ry) {
   return s;
 }
 
+// the magazine as its own group, so the reload can pull it out and seat a fresh one
+function vmMagGroup(g, from) {
+  const mg = new THREE.Group(); mg.name = 'mag';
+  for (const n of g.children.slice(from)) mg.add(n);
+  g.add(mg); mg.userData.base = mg.position.clone();
+}
+
 function buildViewModel(clsKey) {
   vmInit();
   if (R3.vm) { vmScene.remove(R3.vm); R3.vm.traverse(n => { if (n.geometry) n.geometry.dispose(); }); }
@@ -321,6 +338,7 @@ function buildViewModel(clsKey) {
   if (spec.cup) g.position.z = -0.07;   // the pistol is held out at arm's length
   vmScene.add(holder);
   R3.vm = holder; R3.vmCls = clsKey; R3.vmTeam = G.player.team; R3.vmSpec = spec;
+  R3.drawT = 0;   // weapon comes up from below (feel.js)
 }
 // per-frame extras: the shotgun pump and the sniper bolt cycle after each shot
 function animateViewModel() {

@@ -139,6 +139,7 @@ function finishReload(s) {
 }
 function shoot(s, moving) {
   const spread = currentSpread(s, moving);
+  s.lastShotT = G.time;
   s.steady = false; s.steadyT = 0;   // the first shot is dead on; the next ones spread until you hold still again
   const a = s.angle + (Math.random() - 0.5) * 2 * spread;
   const pa = clamp(s.pitch + (Math.random() - 0.5) * 2 * spread * CFG.V_SPREAD, -1.4, 1.4);

@@ -338,6 +338,7 @@ function r3Build(m, art) {
   buildTracers(world);
   buildWeather(world, m.biome);
   R3.decalMesh = null;
+  if (typeof surfaceWorld === 'function') surfaceWorld(world, terrain);
 }
 
 function roofGeometry(L, S, rise) {
@@ -990,7 +991,18 @@ function render3d(dt) {
     else { u.body.position.y = 0; u.legL.rotation.z = sw; u.legR.rotation.z = -sw; }
     }
     u.chute.visible = s.para > 0;
-    u.arms.rotation.z = (s.pitch || 0) + (s.reloading ? -0.6 : 0);
+    // arms: reload lowers them smoothly, each shot kicks them back, a hit makes the soldier flinch, a throw swings over
+    o.reT = lerp(o.reT || 0, s.reloading ? 1 : 0, 1 - Math.exp(-dt * 8));
+    const kt = G.time - (s.lastShotT ?? -9), kick = kt >= 0 && kt < 0.16 ? 1 - kt / 0.16 : 0, heavy = s.cls && (s.cls.key === 'sniper' || s.cls.pellets) ? 2.2 : 1;
+    if (o.lhp !== undefined && s.alive && s.hp < o.lhp - 0.5) o.flT = 0.3;
+    o.lhp = s.hp; o.flT = Math.max(0, (o.flT || 0) - dt);
+    if (o.lnades !== undefined && (s.nades || 0) < o.lnades && s.alive) o.thT = 0.55;
+    o.lnades = s.nades || 0; o.thT = Math.max(0, (o.thT || 0) - dt);
+    if (o.armX0 === undefined) o.armX0 = u.arms.position.x;
+    const fl = Math.sin(o.flT / 0.3 * Math.PI), th = o.thT > 0 ? Math.sin((1 - o.thT / 0.55) * Math.PI) : 0;
+    u.arms.rotation.z = (s.pitch || 0) - 0.6 * o.reT + kick * 0.1 * heavy + th * 1.6;
+    u.arms.position.x = o.armX0 - kick * 1.2 * heavy;
+    u.body.rotation.z += fl * 0.22; u.body.rotation.x += fl * 0.08;
     // teammates: a marker above the head (seen through walls) with their name when close
     if (s.team === P.team && s !== P) {
       if (!o.mark) { o.mark = markerSprite(TEAMS[s.team].color); scene3.add(o.mark); }
@@ -1005,7 +1017,7 @@ function render3d(dt) {
   updateWeather(dt, v.x, v.y);
 
   gl3.autoClear = true;
-  gl3.render(scene3, cam3);
+  if (typeof postRender !== 'function' || !postRender(dt)) gl3.render(scene3, cam3);
 
   // own weapon
   if (v.fp && !v.dead && !G.auto && !(P.scoped && R3.zoom > 1.5)) {

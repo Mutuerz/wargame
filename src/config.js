@@ -125,7 +125,7 @@ const CLASSES = {
   shotgun: {
     name: 'Shotgun', mag: 6, mags: 3, rate: 1.3, reload: 2.6, reloadEmpty: 3.0, dmg: 14,
     bulletSpeed: 1950, range: 672, spread: 0.015, spreadMove: 0.03, speed: 1.05, vision: 1300, auto: false, recoil: [0.09, 0.0225, 0.0],
-    pellets: 9, pelletSpread: 0.1, falloff: [110, 480, 0.2],
+    pellets: 9, pelletSpread: 0.085, falloff: [110, 480, 0.2],
   },
 };
 for (const k in CLASSES) CLASSES[k].key = k;

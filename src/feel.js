@@ -17,14 +17,18 @@ const FEEL = {
   lastJz: 0, lastAir: false, stepPhase: 0,
   // weapon
   sway: { x: { x: 0, v: 0 }, y: { x: 0, v: 0 } }, kick: { x: 0, v: 0 }, sprintT: 0, moveT: 0, lastYaw: null, lastPitch: 0,
+  flinch: { x: 0, v: 0 }, flinchCam: { x: 0, v: 0 }, lastHurt: 0, throwT: 9, lastNades: null, seat: { x: 0, v: 0 }, seated: false,
+  brass: [], eject: [],
   // adaptive resolution
   ft: 1 / 60, pr: 1, prT: 0,
 };
 
 // critically damped-ish spring step: k stiffness, d damping
+// sub-stepped (semi-implicit Euler at <= 1/120 s), so a slow frame can never make a stiff spring blow up
 function springStep(s, target, k, d, dt) {
-  const a = (target - s.x) * k - s.v * d;
-  s.v += a * dt; s.x += s.v * dt;
+  dt = Math.min(dt, 0.1);
+  const n = Math.max(1, Math.ceil(dt * 120)), h = dt / n;
+  for (let i = 0; i < n; i++) { s.v += ((target - s.x) * k - s.v * d) * h; s.x += s.v * h; }
   return s.x;
 }
 
@@ -89,6 +93,9 @@ function feelCamera(P, dt) {
   // recoil: kick up and a little sideways, then settle (springs, not a linear fade)
   springStep(F.recoilP, 0, 180, 20, dt); springStep(F.recoilY, 0, 180, 20, dt);
   out.pitch += F.recoilP.x; out.yaw += F.recoilY.x;
+  // getting hit jolts the view a little (spring, not a shake)
+  springStep(F.flinchCam, 0, 200, 16, dt);
+  out.roll += F.flinchCam.x * 0.6 * k; out.pitch += F.flinchCam.x * 0.25 * k;
   // sprinting widens the view a few degrees
   F.fovKick += ((sprint && grounded && !P.ads ? 6 : 0) - F.fovKick) * (1 - Math.exp(-dt * 6));
   out.fov = reduce ? 0 : F.fovKick;
@@ -98,8 +105,11 @@ function feelShot(P) {
   if (!FEEL.on) return;
   const k = P.cls.key, up = k === 'sniper' ? 0.6 : k === 'shotgun' ? 0.5 : k === 'lmg' ? 0.18 : k === 'pistol' ? 0.14 : 0.2;
   const ads = P.ads ? 0.6 : 1;
-  FEEL.recoilP.v += up * ads * 0.4;   // a small visual kick on top of the real aim recoil (ui.js) FEEL.recoilY.v += (Math.random() - 0.5) * up * 0.5 * ads;
+  FEEL.recoilP.v += up * ads * 0.4;   // a small visual kick on top of the real aim recoil (ui.js)
+  FEEL.recoilY.v += (Math.random() - 0.5) * up * 0.5 * ads;
   FEEL.kick.v += (k === 'sniper' || k === 'shotgun' ? 9 : 4) * (P.ads ? 0.6 : 1);
+  // a spent case flies out of the ejection port: at once for self-loaders, on the pump or bolt for the others
+  FEEL.eject.push({ t: k === 'shotgun' ? 0.32 : k === 'sniper' ? 0.36 : 0, shell: k === 'shotgun' });
 }
 
 // ---------- weapon: sway lag, bob, sprint blend, recoil spring
@@ -122,15 +132,68 @@ function feelWeapon(P, dt, vm, base) {
   const bx = Math.sin(ph) * 0.018 * mv, by = -Math.abs(Math.cos(ph)) * 0.012 * mv;
   const breathe = Math.sin(performance.now() / 1300) * 0.003 * (1 - ad * 0.7);
   const rl = base.reload;
+  // weapon switch / spawn: the gun swings up from below
+  R3.drawT = Math.min(1, (R3.drawT ?? 1) + dt / 0.38);
+  const dr = 1 - (1 - R3.drawT) ** 3, down = 1 - dr;
+  // grenade throw: the gun dips out of the way, then comes back
+  if (F.lastNades !== null && P.nades < F.lastNades) F.throwT = 0;
+  F.lastNades = P.nades; F.throwT += dt;
+  const th = F.throwT < 0.6 ? Math.sin(F.throwT / 0.6 * Math.PI) : 0;
+  // hit: a sideways jolt on the weapon and the view
+  if (G.hurtT > F.lastHurt + 0.05) { const d = Math.random() < 0.5 ? -1 : 1; F.flinch.v += 6 * d; F.flinchCam.v += 0.35 * d; }
+  F.lastHurt = G.hurtT;
+  springStep(F.flinch, 0, 160, 14, dt);
+  // reload: the magazine drops out, a fresh one comes up and is slapped home (the whole gun jolts)
+  const mag = vm.getObjectByName('mag');
+  if (mag) {
+    const p = P.reloading ? clamp(1 - P.reloadT / P.reloadMax, 0, 1) : 1;
+    const out = p < 0.18 ? 0 : p < 0.38 ? (p - 0.18) / 0.2 : p < 0.62 ? 1 : p < 0.82 ? 1 - (p - 0.62) / 0.2 : 0;
+    const e = out * out * (3 - 2 * out);
+    mag.position.set(0, -e * 0.9, e * 0.12); mag.rotation.x = e * 0.35; mag.visible = e < 0.98;
+    if (P.reloading && p >= 0.82 && !F.seated) { F.seated = true; F.seat.v += 9; }
+    if (!P.reloading || p < 0.5) F.seated = false;
+  }
+  springStep(F.seat, 0, 300, 18, dt);
+  const fx = F.flinch.x * 0.004, seat = F.seat.x * 0.003;
   vm.position.set(
-    lerp(0.12, 0, ad) + bx + F.sway.x.x + sp * 0.04,
-    lerp(-0.11, -0.062, ad) + by + breathe + F.sway.y.x - sp * 0.03 - rl * 0.1 + F.land.x * 0.0012,
-    lerp(-0.2, -0.17, ad) + F.kick.x * 0.004 + sp * 0.02);
+    lerp(0.12, 0, ad) + bx + F.sway.x.x + sp * 0.04 + fx + down * 0.05,
+    lerp(-0.11, -0.062, ad) + by + breathe + F.sway.y.x - sp * 0.03 - rl * 0.1 + F.land.x * 0.0012 + seat - down * 0.2 - th * 0.16,
+    lerp(-0.2, -0.17, ad) + F.kick.x * 0.004 + sp * 0.02 + down * 0.05);
   vm.rotation.set(
-    F.kick.x * 0.02 * (1 - ad * 0.6) + rl * 0.5 - sp * 0.35 + F.sway.y.x * 1.5,
-    lerp(0.04, 0, ad) * (1 - sp) + sp * 0.55 + F.sway.x.x * 2,
-    rl * 0.6 + bx * 2 - F.sway.x.x * 1.2);
+    F.kick.x * 0.02 * (1 - ad * 0.6) + rl * 0.5 - sp * 0.35 + F.sway.y.x * 1.5 - down * 0.9 - th * 0.7 + seat * 3,
+    lerp(0.04, 0, ad) * (1 - sp) + sp * 0.55 + F.sway.x.x * 2 + down * 0.3,
+    rl * 0.6 + bx * 2 - F.sway.x.x * 1.2 + fx * 8 + down * 0.5 + th * 0.4);
+  feelBrass(dt, vm);
   return true;
+}
+
+// ---------- spent cases: little brass (or red shotgun) cylinders that tumble out to the right and fall away
+let BRASS_GEO = null, BRASS_MAT = null, SHELL_MAT = null;
+function feelBrass(dt, vm) {
+  const F = FEEL;
+  if (!BRASS_GEO) {
+    BRASS_GEO = new THREE.CylinderGeometry(0.0035, 0.0035, 0.013, 8).rotateZ(Math.PI / 2);
+    BRASS_MAT = new THREE.MeshStandardMaterial({ color: '#c99a3c', metalness: 0.9, roughness: 0.3 });
+    SHELL_MAT = new THREE.MeshStandardMaterial({ color: '#a8262a', metalness: 0.2, roughness: 0.5 });
+  }
+  for (let i = F.eject.length - 1; i >= 0; i--) {
+    const e = F.eject[i]; e.t -= dt;
+    if (e.t > 0) continue;
+    F.eject.splice(i, 1);
+    if (F.brass.length > 14) { const o = F.brass.shift(); vmScene.remove(o.m); }
+    const m = new THREE.Mesh(BRASS_GEO, e.shell ? SHELL_MAT : BRASS_MAT);
+    if (e.shell) m.scale.set(1.5, 1.9, 1.9);
+    vm.updateMatrixWorld(true);
+    const port = new THREE.Vector3(0.03, 0.14, -0.1); vm.children[0].localToWorld(port);
+    m.position.copy(port); m.frustumCulled = false; vmScene.add(m);
+    F.brass.push({ m, vx: 0.55 + Math.random() * 0.25, vy: 0.5 + Math.random() * 0.3, vz: 0.1 + Math.random() * 0.15, sx: (Math.random() - 0.5) * 30, sy: (Math.random() - 0.5) * 30, life: 0.7 });
+  }
+  for (let i = F.brass.length - 1; i >= 0; i--) {
+    const b = F.brass[i]; b.life -= dt; b.vy -= 3.2 * dt;
+    b.m.position.x += b.vx * dt; b.m.position.y += b.vy * dt; b.m.position.z += b.vz * dt;
+    b.m.rotation.x += b.sx * dt; b.m.rotation.y += b.sy * dt;
+    if (b.life <= 0) { vmScene.remove(b.m); F.brass.splice(i, 1); }
+  }
 }
 
 // ---------- adaptive resolution: drop render scale when frames run long, raise it back when there is headroom
