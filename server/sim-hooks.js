@@ -174,7 +174,7 @@ const SIM = {
       if (s.reloading) f |= 1; if (s.scoped) f |= 2; if (s.shield > 0) f |= 4;
       if (s.c4 > 0 && s.bot && s.bot.role === 'sapper') f |= 8; if (s.act) f |= 16;
       if (s.team !== T && G.time - s.spotted[T] < 1.6) f |= 32;
-      if (s.crouch) f |= 64;
+      if (s.crouch) f |= 64; if (s.ads) f |= 128;
       sol.push([s.id, r1(s.x), r1(s.y), r2(s.angle), Math.ceil(s.hp), f, s.reloading ? r2(1 - s.reloadT / s.reloadMax) : 0, s.act ? r2(s.actT / CFG.C4_PLANT) : 0, r1(s.z), r2(s.pitch), r1(s.para || 0), r1(s.jz || 0)]);
     }
     return {

@@ -1079,7 +1079,9 @@ function render3d(dt) {
   SFX.listener.x = v.x; SFX.listener.y = v.y;
   R3.camElev = v.z;
   // scope zoom
-  const zoomT = v.dead ? 1 : v.fp && P.scoped ? CFG.SCOPE_ZOOM : v.fp && P.ads ? CFG.ADS_ZOOM : 1;
+  const VW_ = v.who || P;   // whose eyes: yours, or the kill cam / first-person spectating target
+  R3.vScoped = !!(v.fp && !v.dead && VW_.scoped);
+  const zoomT = v.dead ? 1 : v.fp && VW_.scoped ? CFG.SCOPE_ZOOM : v.fp && VW_.ads ? CFG.ADS_ZOOM : 1;
   R3.zoom = lerp(R3.zoom, zoomT, 1 - Math.exp(-dt * 14));
   if (Math.abs(R3.zoom - zoomT) < 0.02) R3.zoom = zoomT;
   const fov = 2 * Math.atan(Math.tan((CFG.FOV + (v.fovAdd || 0)) * Math.PI / 360) / R3.zoom) * 180 / Math.PI;
@@ -1121,7 +1123,9 @@ function render3d(dt) {
     if (o.armX0 === undefined) o.armX0 = u.arms.position.x;
     const fl = Math.sin(o.flT / 0.3 * Math.PI), th = o.thT > 0 ? Math.sin((1 - o.thT / 0.55) * Math.PI) : 0;
     u.arms.rotation.z = (s.pitch || 0) - 0.6 * o.reT + kick * 0.1 * heavy + th * 1.6;
-    u.arms.position.x = o.armX0 - kick * 1.2 * heavy;
+    o.adsT = lerp(o.adsT || 0, s.ads || s.scoped ? 1 : 0, 1 - Math.exp(-dt * 10));
+    if (o.armY0 === undefined) o.armY0 = u.arms.position.y;
+    u.arms.position.x = o.armX0 - kick * 1.2 * heavy - o.adsT * 1.5; u.arms.position.y = o.armY0 + o.adsT * 3.5;
     u.body.rotation.z += fl * 0.22; u.body.rotation.x += fl * 0.08;
     // teammates: a marker above the head (seen through walls) with their name when close
     if (s.team === P.team && s !== P) {
@@ -1140,13 +1144,15 @@ function render3d(dt) {
   if (typeof postRender !== 'function' || !postRender(dt)) gl3.render(scene3, cam3);
 
   // someone else's weapon: the kill cam or first-person spectating (a simple hip pose, kick and flash on their shots)
-  if (v.fp && v.who && v.who !== P && v.who.cls) {
+  if (v.fp && v.who && v.who !== P && v.who.cls && !(v.who.scoped && R3.zoom > 1.5)) {
     const w = v.who;
+    R3.wAdsT = lerp(R3.wAdsT || 0, w.ads ? 1 : 0, 1 - Math.exp(-dt * 14)); const ad = R3.wAdsT;
     if (!R3.vm || R3.vmCls !== w.cls.key || R3.vmTeam !== w.team) buildViewModel(w.cls.key, w.team);
     const vm = R3.vm, st = G.time - (w.lastShotT ?? -9), kick = st >= 0 && st < 0.15 ? 1 - st / 0.15 : 0, rl = w.reloading ? 1 : 0;
     const ph = w.rwp ?? w.walkPhase ?? 0, mv = Math.min(1, Math.hypot(w.vx || 0, w.vy || 0) / CFG.WALK);
-    vm.position.set(0.12 + Math.sin(ph) * 0.012 * mv, -0.11 - Math.abs(Math.cos(ph)) * 0.01 * mv - rl * 0.08, -0.2 + kick * 0.025);
-    vm.rotation.set(kick * 0.07 + rl * 0.45, 0.04, rl * 0.5);
+    if (R3.vmCls !== w.cls.key) R3.wAdsT = 0;
+    vm.position.set(lerp(0.12 + Math.sin(ph) * 0.012 * mv, 0, ad), lerp(-0.11 - Math.abs(Math.cos(ph)) * 0.01 * mv, -(R3.vmSpec?.sight ?? 0.207) * 0.3, ad) - rl * 0.08, lerp(-0.2, -0.15, ad) + kick * 0.025);
+    vm.rotation.set(kick * 0.07 * (1 - ad * 0.6) + rl * 0.45, 0.04 * (1 - ad), rl * 0.5);
     const fl = vm.getObjectByName('flash'); fl.visible = st >= 0 && st < 0.05; fl.material.rotation = Math.random() * TAU;
     gl3.autoClear = false; gl3.clearDepth(); gl3.render(vmScene, vmCam); gl3.autoClear = true;
     R3.lastMag = -1;

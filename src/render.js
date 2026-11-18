@@ -47,7 +47,7 @@ function render(dt) {
   try { render3d(dt); } finally { kcEnd(); }
   const B = BIOMES[G.m.biome], P = G.player;
   ctx.fillStyle = B.tint; ctx.fillRect(0, 0, VW, VH);
-  if (P.scoped && R3.zoom > 1.5) drawScope();
+  if (R3.vScoped && R3.zoom > 1.5) drawScope();   // yours, or the scope of whoever you are watching
   else ctx.drawImage(vignette, 0, 0, VW, VH);
   if (KC.on) { kcOverlay(); return; }
   if (G.hurtT > 0) {

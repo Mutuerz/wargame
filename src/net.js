@@ -361,7 +361,7 @@ const NET = {
       s.alive = true; s.x = x; s.y = y; s.z = L(na[8] || 0, nb[8] || 0); s.pitch = nb[9] || 0; s.para = L(na[10] || 0, nb[10] || 0); s.jz = L(na[11] || 0, nb[11] || 0); s.angle = LA(na[3], nb[3]);
       s.hp = nb[4];
       const fl = nb[5];
-      s.reloading = !!(fl & 1); s.scoped = !!(fl & 2); s.crouch = !!(fl & 64); s.shield = fl & 4 ? 1 : 0;
+      s.reloading = !!(fl & 1); s.scoped = !!(fl & 2); s.crouch = !!(fl & 64); s.ads = !!(fl & 128); s.shield = fl & 4 ? 1 : 0;
       s.c4 = fl & 8 ? 1 : 0; s.bot = fl & 8 ? { role: 'sapper' } : null;
       s.act = fl & 16 ? 'plant' : null; s.actT = nb[7] * CFG.C4_PLANT;
       s.reloadMax = 1; s.reloadT = 1 - nb[6];

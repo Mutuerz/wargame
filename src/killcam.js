@@ -28,7 +28,7 @@ function kcRecord(dt) {
   const s = [];
   for (const q of G.soldiers) {
     if (!q.alive || q.x < -9000) continue;
-    s.push([q, q.rx ?? q.x, q.ry ?? q.y, q.rfz ?? feetZ(q), q.ra ?? q.angle, q.pitch || 0, q.crouch ? 1 : 0, q.jz || 0, q.rwp ?? q.walkPhase ?? 0, q.lastShotT ?? -9, q.reloading ? 1 : 0, q.para || 0]);
+    s.push([q, q.rx ?? q.x, q.ry ?? q.y, q.rfz ?? feetZ(q), q.ra ?? q.angle, q.pitch || 0, q.crouch ? 1 : 0, q.jz || 0, q.rwp ?? q.walkPhase ?? 0, q.lastShotT ?? -9, q.reloading ? 1 : 0, q.para || 0, q.ads ? 1 : 0, q.scoped ? 1 : 0]);
   }
   const b = [];
   for (const u of G.bullets) if (b.length < 60) b.push({ x: u.x, y: u.y, z: u.z, vx: u.vx, vy: u.vy, vz: u.vz, sniper: u.sniper, pel: u.pel, team: u.team, life: u.life, gs: 9, seen: 1 });
@@ -69,7 +69,7 @@ function kcAt(t) {
 }
 
 // ---------- playback: before the 3D view draws, pose everyone as recorded; afterwards put the real state back
-const KC_FIELDS = ['x', 'y', 'rx', 'ry', 'rfz', 'ra', 'rwp', 'angle', 'pitch', 'alive', 'crouch', 'jz', 'para', 'lastShotT', 'reloading', 'walkPhase'];
+const KC_FIELDS = ['x', 'y', 'rx', 'ry', 'rfz', 'ra', 'rwp', 'angle', 'pitch', 'alive', 'crouch', 'jz', 'para', 'lastShotT', 'reloading', 'walkPhase', 'ads', 'scoped'];
 function kcBegin() {
   if (!KC.on || !KC.clip) return;
   const { a, b, f } = kcAt(KC.t), saved = new Map();
@@ -82,7 +82,7 @@ function kcBegin() {
     q.x = q.rx = lerp(r[1], n[1], f); q.y = q.ry = lerp(r[2], n[2], f); q.rfz = lerp(r[3], n[3], f);
     q.ra = q.angle = r[4] + angDiff(r[4], n[4]) * f; q.pitch = lerp(r[5], n[5], f);
     q.alive = true; q.crouch = !!r[6]; q.jz = r[7]; q.rwp = q.walkPhase = lerp(r[8], n[8], f);
-    q.lastShotT = G.time - (KC.t - r[9]); q.reloading = !!r[10]; q.para = r[11];
+    q.lastShotT = G.time - (KC.t - r[9]); q.reloading = !!r[10]; q.para = r[11]; q.ads = !!r[12]; q.scoped = !!r[13];
   }
   // soldiers not in the recording at this moment are hidden for the frame
   for (const q of G.soldiers) if (!seen.has(q)) { const o = {}; for (const k of KC_FIELDS) o[k] = q[k]; saved.set(q, o); q.alive = false; }
