@@ -48,6 +48,7 @@ function addSurfaceDetail(mat, opts = {}) {
   const u = {
     surfTex: { value: SURF.tex },
     surfAlbedoTex: { value: opts.albedo || SURF.tex },
+    surfAlbedoAvg: { value: opts.albedo && opts.albedo.userData.avg || new THREE.Vector3(1, 1, 1) },
     surfK: { value: new THREE.Vector4(opts.strength ?? 0.32, opts.bump ?? 0.9, 1 / (opts.scale ?? 70), opts.albedoStrength ?? 0) },
   };
   mat.onBeforeCompile = sh => {
@@ -62,7 +63,7 @@ function addSurfaceDetail(mat, opts = {}) {
           sw = modelMatrix * sw; vSurfW = sw.xyz; vSurfN = normalize(mat3(modelMatrix) * sn); }`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
-        uniform sampler2D surfTex; uniform sampler2D surfAlbedoTex; uniform vec4 surfK; varying vec3 vSurfW; varying vec3 vSurfN;
+        uniform sampler2D surfTex; uniform sampler2D surfAlbedoTex; uniform vec3 surfAlbedoAvg; uniform vec4 surfK; varying vec3 vSurfW; varying vec3 vSurfN;
         float surfH(vec3 p, vec3 n) {
           vec3 w = pow(abs(n), vec3(4.0)); w /= (w.x + w.y + w.z + 1e-4);
           vec3 q = p * surfK.z;
@@ -78,7 +79,9 @@ function addSurfaceDetail(mat, opts = {}) {
         float sH = surfH(vSurfW, vSurfN);
         diffuseColor.rgb *= 1.0 + (sH - 0.5) * 2.0 * surfK.x;
         diffuseColor.rgb *= 0.9 + 0.2 * surfBig(vSurfW);
-        diffuseColor.rgb *= mix(vec3(1.0), surfAlbedo(vSurfW, vSurfN), surfK.w);`)
+        // the theatre's ground photo as detail around the painted map's colour (divided by its own average), so
+        // roads, mud and sector colours keep their hue and brightness and only gain the photo's texture
+        diffuseColor.rgb *= mix(vec3(1.0), clamp(surfAlbedo(vSurfW, vSurfN) / max(surfAlbedoAvg, vec3(0.02)), 0.0, 2.5), surfK.w);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         { // derivative bump from the same detail height
           vec2 dH = vec2(dFdx(sH), dFdy(sH)) * surfK.y * 4.0;
