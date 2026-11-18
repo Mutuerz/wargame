@@ -444,6 +444,23 @@ const SOLDIER_GEO = {
   fore: new THREE.BoxGeometry(8, 3.4, 3.4).translate(10.5, 0, 0),
   glove: new THREE.BoxGeometry(3, 3.6, 3.6).translate(16, 0, 0),
 };
+// Arm from shoulder S to hand H (arms-group coordinates): upper arm 7 long, forearm + glove reaching 11; the elbow
+// bends toward 'down and out' (side +1 = right).
+const ARM_FORE = new THREE.BoxGeometry(8, 3.4, 3.4).translate(4, 0, 0), ARM_GLOVE = new THREE.BoxGeometry(3, 3.6, 3.6).translate(9.5, 0, 0);
+function ikArm(S, H, side, uni, glove) {
+  const L1 = 7, L2 = 11, X = new THREE.Vector3(1, 0, 0), g = new THREE.Group();
+  const sv = new THREE.Vector3(...S), hv = new THREE.Vector3(...H), dir = hv.clone().sub(sv);
+  const dl = clamp(dir.length(), 0.5, L1 + L2 - 0.05); dir.normalize();
+  const a = Math.acos(clamp((L1 * L1 + dl * dl - L2 * L2) / (2 * L1 * dl), -1, 1));
+  const pole = new THREE.Vector3(0, -1, side * 0.7); pole.sub(dir.clone().multiplyScalar(pole.dot(dir))).normalize();
+  const E = sv.clone().addScaledVector(dir, Math.cos(a) * L1).addScaledVector(pole, Math.sin(a) * L1);
+  const up = new THREE.Mesh(SOLDIER_GEO.upper, uni); up.position.copy(sv); up.quaternion.setFromUnitVectors(X, E.clone().sub(sv).normalize());
+  const fq = new THREE.Quaternion().setFromUnitVectors(X, hv.clone().sub(E).normalize());
+  const fo = new THREE.Mesh(ARM_FORE, uni); fo.position.copy(E); fo.quaternion.copy(fq);
+  const gl = new THREE.Mesh(ARM_GLOVE, glove); gl.position.copy(E); gl.quaternion.copy(fq);
+  g.add(up, fo, gl);
+  return g;
+}
 const GUN_SPEC = {   // length, height, barrel length, magazine height, stock length
   rifleman: { L: 22, H: 3.6, B: 9, mag: 6, stock: 8 },
   sniper: { L: 28, H: 3.2, B: 15, mag: 3.5, stock: 10, scope: true },
@@ -512,10 +529,13 @@ function makeSoldierModel(team, clsKey) {
   const band = new THREE.Mesh(new THREE.BoxGeometry(4.6, 2, 4.6), lam(T.color, { emissive: shade(T.color, 0.35) })); band.position.set(0, 24.5, 6.9);   // armband
   const band2 = band.clone(); band2.position.z = -6.9;
   const arms = new THREE.Group(); arms.position.set(1, 26.5, 0);
-  const arm = (z, ry) => { const a = new THREE.Group(); a.position.z = z; a.rotation.y = ry; a.add(new THREE.Mesh(SOLDIER_GEO.upper, uni), new THREE.Mesh(SOLDIER_GEO.fore, uni), new THREE.Mesh(SOLDIER_GEO.glove, glove)); return a; };
-  const armL = arm(-5.4, 0.42), armR = arm(5.4, -0.2);
-  const gun = gunMesh(clsKey, gunM); gun.position.set(7, -1, 1.6);
-  arms.add(armL, armR, gun);
+  // a real rifle hold: stock in the right shoulder, right hand on the grip, left hand forward under the handguard,
+  // elbows bent down and out (two-bone IK, solved once here). The pistol is held out in front with both hands.
+  const sp = GUN_SPEC[clsKey] || GUN_SPEC.rifleman, pistol = !sp.stock;
+  const G = pistol ? [9, -3, 0.8] : [2.5, -2.2, 2.4];
+  const gun = gunMesh(clsKey, gunM); gun.position.set(G[0], G[1], G[2]); gun.rotation.y = pistol ? 0 : -0.05;
+  const hR = [G[0] + 3, G[1] - 3.4, G[2]], hL = pistol ? [G[0] + 2.4, G[1] - 3.9, G[2] - 1.6] : [G[0] + Math.min(sp.L * 0.62, 14.5), G[1] - 2, G[2] - 0.4];
+  arms.add(ikArm([0, 0, 5.4], hR, 1, uni, glove), ikArm([0, 0, -5.4], hL, -1, uni, glove), gun);
   body.add(legL, legR, hips, torso, vest, collar, pack, roll, head, nose, helmet, brim, goggles, band, band2, arms);
   // parachute canopy and lines, shown while dropping in
   const chute = new THREE.Group();
@@ -1123,7 +1143,9 @@ function render3d(dt) {
     o.lnades = s.nades || 0; o.thT = Math.max(0, (o.thT || 0) - dt);
     if (o.armX0 === undefined) o.armX0 = u.arms.position.x;
     const fl = Math.sin(o.flT / 0.3 * Math.PI), th = o.thT > 0 ? Math.sin((1 - o.thT / 0.55) * Math.PI) : 0;
-    u.arms.rotation.z = (s.pitch || 0) - 0.6 * o.reT + kick * 0.1 * heavy + th * 1.6;
+    const lowReady = (o.rT || 0) * (1 - (o.adsT || 0));   // sprinting: muzzle down, rifle across the body
+    u.arms.rotation.z = (s.pitch || 0) - 0.6 * o.reT + kick * 0.1 * heavy + th * 1.6 - 0.45 * lowReady;
+    u.arms.rotation.x = (FEEL.on ? u.arms.rotation.x : 0) - 0.25 * lowReady;
     o.adsT = lerp(o.adsT || 0, s.ads || s.scoped ? 1 : 0, 1 - Math.exp(-dt * 10));
     if (o.armY0 === undefined) o.armY0 = u.arms.position.y;
     u.arms.position.x = o.armX0 - kick * 1.2 * heavy - o.adsT * 1.5; u.arms.position.y = o.armY0 + o.adsT * 3.5;
