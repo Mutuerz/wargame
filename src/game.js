@@ -155,7 +155,8 @@ function shoot(s, moving) {
   const sn = s.cls === CLASSES.sniper;   // the sniper's muzzle flash is much brighter and easier to spot
   G.particles.push({ type: 'flash', x: mx, y: my, z: mz, a: s.angle, life: sn ? 0.14 : 0.05, max: sn ? 0.14 : 0.05, big: sn });
   if (Math.random() < 0.5) stampCasing(G.art, s.x + Math.cos(s.angle + 1.6) * 16, s.y + Math.sin(s.angle + 1.6) * 16);
-  SFX.shot(s.x, s.y, s.isPlayer);
+  if (s.cls.pellets) SFX.shotgun(s.x, s.y, s.isPlayer, () => s.alive && s.mag > 0 && s.cls.pellets);
+  else SFX.shot(s.x, s.y, s.isPlayer);
 }
 
 // Heights in the world: the floor a soldier stands on, and their eyes.

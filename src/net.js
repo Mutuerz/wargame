@@ -226,7 +226,8 @@ const NET = {
       if (sniper === 3) return;   // extra shotgun pellets: one flash and one bang per shot
       G.particles.push({ type: 'flash', x, y, z: z || undefined, a: Math.atan2(vy, vx), life: sniper === 1 ? 0.14 : 0.05, max: sniper === 1 ? 0.14 : 0.05, big: sniper === 1 });
       if (Math.random() < 0.5) { const a = Math.atan2(vy, vx); stampCasing(G.art, x - Math.cos(a) * 26 + Math.cos(a + 1.6) * 16, y - Math.sin(a) * 26 + Math.sin(a + 1.6) * 16); }
-      SFX.shot(x, y, owner === P.id);
+      if (sniper === 2) SFX.shotgun(x, y, owner === P.id, owner === P.id ? () => P.alive && P.mag > 0 && !!P.cls.pellets : null);
+      else SFX.shot(x, y, owner === P.id);
     } else if (k === 'hit') {
       const [, tid, aid, x, y] = e;
       if (Math.random() < 0.6) stampBlood(G.art, x + rand(-10, 10), y + rand(-10, 10), rand(3, 7));
