@@ -20,7 +20,8 @@ function kcRecord(dt) {
   const P = G.player;
   // death: keep recording one more second (your body going down), then freeze the clip for the replay
   if (P && KC.wasAlive && !P.alive) { const k = P.lastHitBy; KC.pend = k && k !== P && k.team !== P.team ? { k, td: G.time } : null; KC.clip = null; KC.wait = 2.3; }
-  if (P) { KC.wasAlive = P.alive; if (P.alive) { KC.pend = null; if (KC.on || KC.clip) kcStop(); } }
+  // respawning does not cut it short: it keeps playing while you parachute in, and ends when you land (or Space)
+  if (P) { KC.wasAlive = P.alive; if (P.alive && !(P.para > 0)) { KC.pend = null; if (KC.on || KC.clip) kcStop(); } }
   if (KC.pend && G.time >= KC.pend.td + KC_AFTER) kcCapture();
   if (KC.on) return;   // no need to record while watching
   KC.acc += dt;
@@ -52,7 +53,7 @@ function kcUpdate(dt) {
   const P = G && G.player;
   if (!P) return;
   KC.wait -= dt;
-  if (!KC.on && KC.clip && !P.alive && (R3.death ? R3.death.t >= 2.2 : KC.wait <= 0)) KC.on = true;   // after the 2.2 s death fall
+  if (!KC.on && KC.clip && (!P.alive || P.para > 0) && (R3.death ? R3.death.t >= 2.2 : KC.wait <= 0)) KC.on = true;   // after the 2.2 s death fall
   if (!KC.on) return;
   const slow = KC.t > KC.td - 0.5 && KC.t < KC.td + 0.25 ? 0.35 : 1;   // slow motion around the killing shot
   KC.t += dt * slow;
@@ -120,7 +121,7 @@ function kcOverlay() {
   ctx.fillStyle = 'rgba(255,40,30,0.06)'; ctx.fillRect(0, bar, VW, VH - bar * 2);
   txt('KILL CAM', 24, bar / 2, `800 20px ${D}`, '#ff5a4e', 'left', 'middle');
   txt(`Killed by ${KC.label}`, VW / 2, bar / 2, `700 18px ${D}`, '#ffffff', 'center', 'middle');
-  txt('Space to skip', VW - 24, bar / 2, `500 13px "IBM Plex Mono", monospace`, '#b8c0b4', 'right', 'middle');
+  txt(G.player.alive ? 'Parachuting in · Space to skip' : 'Space to skip', VW - 24, bar / 2, `500 13px "IBM Plex Mono", monospace`, '#b8c0b4', 'right', 'middle');
   const p = clamp((KC.t - KC.t0) / Math.max(0.1, KC.t1 - KC.t0), 0, 1);
   ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(VW * 0.3, VH - bar / 2 - 2, VW * 0.4, 4);
   ctx.fillStyle = '#ff5a4e'; ctx.fillRect(VW * 0.3, VH - bar / 2 - 2, VW * 0.4 * p, 4);
