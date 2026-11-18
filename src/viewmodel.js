@@ -318,12 +318,12 @@ function vmMagGroup(g, from) {
   g.add(mg); mg.userData.base = mg.position.clone();
 }
 
-function buildViewModel(clsKey) {
+function buildViewModel(clsKey, team = G.player.team) {
   vmInit();
   VM_SIGHT = 0.207;
   if (R3.vm) { vmScene.remove(R3.vm); R3.vm.traverse(n => { if (n.geometry) n.geometry.dispose(); }); }
   const M = VMX.mats, g = new THREE.Group();
-  const sleeveM = new THREE.MeshStandardMaterial({ color: new THREE.Color('#4a4f40').lerp(new THREE.Color(TEAMS[G.player.team].dark), 0.35), metalness: 0, roughness: 0.95, bumpMap: VMX.fabric, bumpScale: 0.004 });
+  const sleeveM = new THREE.MeshStandardMaterial({ color: new THREE.Color('#4a4f40').lerp(new THREE.Color(TEAMS[team].dark), 0.35), metalness: 0, roughness: 0.95, bumpMap: VMX.fabric, bumpScale: 0.004 });
   const spec = (clsKey === 'sniper' ? vmSniper : clsKey === 'smg' ? vmSmg : clsKey === 'lmg' ? vmLmg : clsKey === 'shotgun' ? vmShotgun : clsKey === 'pistol' ? vmPistol : vmRifle)(g, M);
   const handR = vmHand(M, false); handR.position.set(0.0, -0.05, 0.03); handR.rotation.set(-0.35, 0, 0); g.add(handR);
   const handL = vmHand(M, true);
@@ -342,7 +342,7 @@ function buildViewModel(clsKey) {
   if (spec.cup) g.position.z = -0.07;   // the pistol is held out at arm's length
   vmScene.add(holder);
   spec.sight = VM_SIGHT; VM_SIGHT = 0.207;
-  R3.vm = holder; R3.vmCls = clsKey; R3.vmTeam = G.player.team; R3.vmSpec = spec;
+  R3.vm = holder; R3.vmCls = clsKey; R3.vmTeam = team; R3.vmSpec = spec;
   R3.drawT = 0;   // weapon comes up from below (feel.js)
 }
 // per-frame extras: the shotgun pump and the sniper bolt cycle after each shot

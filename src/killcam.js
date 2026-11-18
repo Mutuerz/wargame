@@ -42,6 +42,7 @@ function kcCapture(P) {
   const end = KC.frames[KC.frames.length - 1].t;
   KC.clip = KC.frames.filter(f => f.t >= end - KC_LEN);
   KC.frames = [];
+  KC.wait = 2.3;
   KC.killer = k; KC.t0 = KC.clip[0].t; KC.t1 = end; KC.t = KC.t0;
   KC.label = `${k.name}${k.cls ? ' · ' + k.cls.name : ''}`;
 }
@@ -50,7 +51,7 @@ function kcCapture(P) {
 function kcUpdate(dt) {
   const P = G && G.player;
   if (!P) return;
-  if (!KC.on && KC.clip && !P.alive && (!R3.death || R3.death.t >= 2.2)) KC.on = true;
+  if (!KC.on && KC.clip && !P.alive && (KC.wait -= dt) <= 0) KC.on = true;   // after the 2.2 s death fall
   if (!KC.on) return;
   const slow = KC.t > KC.t1 - KC_SLOW ? 0.35 : 1;
   KC.t += dt * slow;
@@ -93,20 +94,11 @@ function kcEnd() {
   G.bullets = KC.savedB; KC.saved = null; KC.savedB = null;
 }
 
-// the camera: just behind and to the right of the killer's head, looking where they aim
+// the camera: the killer's own eyes, looking where they aimed (render3d draws their gun and hides their body)
 function kcCamera() {
   const k = KC.killer;
   if (!KC.on || !k || !KC.saved) return null;
-  const m = G.m, a = k.angle, p = clamp(k.pitch || 0, -0.6, 0.6);
-  const ez = k.rfz + (k.crouch ? CFG.CROUCH_EYE : CFG.EYE) + 6;
-  const back = 46, side = 16;
-  let f = 1;
-  for (let s = 0.2; s <= 1.0001; s += 0.1) {
-    const x = k.x - Math.cos(a) * back * s - Math.sin(a) * side * s, y = k.y - Math.sin(a) * back * s + Math.cos(a) * side * s;
-    if (x < 10 || y < 10 || x > W - 10 || y > H - 10 || blockedAt(m, x, y, ez)) { f = Math.max(0.15, s - 0.1); break; }
-  }
-  const x = k.x - Math.cos(a) * back * f - Math.sin(a) * side * f, y = k.y - Math.sin(a) * back * f + Math.cos(a) * side * f;
-  return { fp: false, kc: true, x, y, z: Math.max(ez, elevAt(m, x, y) + 12), yaw: a, pitch: p };
+  return { fp: true, who: k, x: k.x, y: k.y, z: k.rfz + (k.crouch ? CFG.CROUCH_EYE : CFG.EYE), yaw: k.angle, pitch: clamp(k.pitch || 0, -1.4, 1.4) };
 }
 
 // ---------- overlay

@@ -69,7 +69,7 @@ function feelCamera(P, dt) {
   F.eyeOff += (eyeT - F.eyeOff) * (1 - Math.exp(-dt * 12));
   out.dz += F.eyeOff - eyeT;
   // head bob: vertical twice per stride (each footfall), sideways once; grows with speed
-  const bobT = grounded ? clamp(spd / CFG.WALK, 0, 1.6) * (P.ads ? 0.25 : 1) : 0;
+  const bobT = grounded && !P.slide ? clamp(spd / CFG.WALK, 0, 1.6) * (P.ads ? 0.25 : 1) : 0;
   F.bobAmt += (bobT - F.bobAmt) * (1 - Math.exp(-dt * 8));
   const ph = P.rwp ?? P.walkPhase, k = reduce ? 0.3 : 1;
   out.dz += -Math.abs(Math.sin(ph)) * 1.6 * F.bobAmt * k + 0.8 * F.bobAmt * k;

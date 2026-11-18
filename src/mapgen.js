@@ -267,6 +267,27 @@ function tryGenerate(bk, seed, density) {
       break;
   }
 
+  // --- Props: the things you would find out there (vehicles, containers, camps, farms, streets)
+  const along = (x, y, L, S, kind) => R() < 0.5 ? rect(x, y, L, S, kind) : rect(x, y, S, L, kind);
+  const barrels = (x, y) => { const n = ri(3, 5), out = []; for (let i = 0; i < n; i++) out.push(circ(x + (i % 3) * 20, y + Math.floor(i / 3) * 20, 9, 'barrel')); return out; };
+  const fence = (x, y) => [along(x, y, ri(3, 6) * 30, 6, 'fence')];
+  const camp = (x, y) => [rect(x, y, 76, 56, 'tent'), ...barrels(x + 90, y + 10)];
+  const P = {
+    truck: (x, y) => [along(x, y, 120, 44, 'truck')], tank: (x, y) => [along(x, y, 104, 58, 'tank')],
+    container: (x, y) => R() < 0.3 ? [along(x, y, 150, 42, 'container'), along(x, y + 46, 150, 42, 'container')].slice(0, 1) : [along(x, y, 150, 42, 'container')],
+    hay: (x, y) => [circ(x, y, 15, 'hay'), circ(x + 32, y + rnd(-6, 6), 15, 'hay')], well: (x, y) => [circ(x, y, 18, 'well')],
+    bus: (x, y) => [along(x, y, 160, 42, 'bus')], dumpster: (x, y) => [along(x, y, 54, 30, 'dumpster')], boat: (x, y) => [along(x, y, 74, 24, 'boat')],
+    pole: (x, y) => [circ(x, y, 4, 'pole')], bunker: (x, y) => [along(x, y, 90, 64, 'bunker')],
+  };
+  const props = {
+    forest: [[5, P.truck], [3, P.tank], [9, P.hay], [10, fence], [4, barrels], [8, P.pole], [3, camp], [3, P.bunker]],
+    desert: [[5, P.tank], [5, P.truck], [7, P.container], [6, camp], [5, P.well], [5, barrels], [3, P.bunker]],
+    urban: [[5, P.bus], [8, P.container], [10, P.dumpster], [6, barrels], [12, P.pole], [3, P.tank], [3, P.truck]],
+    snow: [[5, P.truck], [3, P.tank], [6, camp], [9, fence], [4, barrels], [8, P.pole], [3, P.bunker]],
+    swamp: [[8, P.boat], [4, P.truck], [8, fence], [4, barrels], [6, P.pole], [3, camp]],
+  }[bk] || [];
+  for (const [n, f] of props) scatter(n, f, 30);
+
   // --- Light cover inside the base
   X0 = 210; X1 = 600;
   scatter(5, (x, y) => R() < 0.5 ? [rect(x, y, 34, 34, 'crate'), rect(x + 36, y, 34, 34, 'crate')] : bagLine(x, y, ri(3, 5), R() < 0.5), 40);

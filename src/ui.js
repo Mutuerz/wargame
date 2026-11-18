@@ -43,6 +43,7 @@ window.addEventListener('keydown', e => {
   else if (G.player.alive && (e.code === 'Digit1' || e.code === 'Digit2')) selectSlot(e.code === 'Digit2' ? 1 : 0);
   else if (!G.player.alive && !G.player.riding && /^Digit[1-9]$/.test(e.code)) { const k = Object.keys(CLASSES)[+e.code.slice(5) - 1]; if (k) pickRespawnWeapon(k); }
   else if (!G.player.alive && (e.code === 'Space' || e.code === 'ArrowRight')) G.specIdx++;
+  else if (!G.player.alive && e.code === 'KeyV') R3.specFP = !R3.specFP;   // spectate in first / third person
   else if (!G.player.alive && e.code === 'ArrowLeft') G.specIdx--;
   else if (e.code === 'KeyM') { G.showMap = !G.showMap; G.mapForStrike = false; }
   else if (e.code === 'KeyP') togglePerks();
@@ -361,7 +362,7 @@ function updateRespawnDock() {
   const t = P.team, tm = G.teams[t];
   let msg;
   const spec = spectateTarget();
-  const specTxt = spec && !P.riding ? ` Spectating ${spec.name}: click or Space to switch. Number keys pick your weapon.` : '';
+  const specTxt = spec && !P.riding ? ` Spectating ${spec.name}: click or Space to switch, V for ${R3.specFP ? 'third' : 'first'} person. Number keys pick your weapon.` : '';
   if (P.riding) msg = `Riding the transport to sector ${P.riding.target.name} (${Math.ceil(P.riding.hp)} HP). Press E to jump out early.`;
   else {
     const held = G.m.points.filter(p => fullyHeld(p, t)).map(p => p.name);

@@ -250,6 +250,9 @@ function r3Build(m, art) {
         box.add(mat(cx, gz + 16, cy, o.w > o.h ? o.w * 0.55 : o.w * 0.9, 14, o.w > o.h ? o.h * 0.9 : o.h * 0.55), shade(c, 0.7), sid);
         break;
       }
+      case 'truck': case 'tank': case 'container': case 'tent': case 'barrel': case 'hay': case 'fence': case 'well':
+      case 'bus': case 'dumpster': case 'boat': case 'pole': case 'bunker':
+        buildProp(o, k, cx, cy, gz, sd, sid, { box, cyl, cone, sph }, m.biome); break;
       default: box.add(mat(cx, gz - 4, cy, o.t === 'c' ? o.r * 2 : o.w, o.z1 + 4, o.t === 'c' ? o.r * 2 : o.h), '#777', sid);
     }
   }
@@ -887,6 +890,116 @@ function updateWeather(dt, cx, cz) {
 
 // ---------- first-person weapon (view model): see viewmodel.js
 
+// ---------- props (vehicles, containers, camp gear...): built from the shared instanced boxes and cylinders, so a
+// hundred of them cost a handful of draw calls. Long axis = the rect's long side; local +x is the front.
+function buildProp(o, k, cx, cy, gz, sd, sid, B3, biome) {
+  const { box, cyl, cone } = B3, rng = mulberry32((sd * 1e9) >>> 0);
+  const isR = o.t === 'r', L = isR ? Math.max(o.w, o.h) : o.r * 2, S = isR ? Math.min(o.w, o.h) : o.r * 2;
+  const ry = isR ? (o.w >= o.h ? 0 : Math.PI / 2) + (rng() < 0.5 ? 0 : Math.PI) : rng() * 6.28;
+  const ca = Math.cos(ry), sa = Math.sin(ry);
+  const at = (lx, lz) => [cx + lx * ca + lz * sa, cy - lx * sa + lz * ca];
+  const B = (lx, lz, y, sx, sy, sz, c, rx = 0, rz = 0) => { const [x, z] = at(lx, lz); box.add(mat(x, gz + y, z, sx, sy, sz, ry, rx, rz), c, sid); };
+  const C = (lx, lz, y, r, h, c) => { const [x, z] = at(lx, lz); cyl.add(mat(x, gz + y, z, r, h, r, ry), c, sid); };
+  const wheel = (lx, lz, r, w) => { const [x, z] = at(lx, lz - w / 2); cyl.add(mat(x, gz + r - 2, z, r, w, r, ry, Math.PI / 2), '#1c1c1a', sid); };
+  const olive = biome === 'desert' ? '#9a8256' : biome === 'snow' ? '#d9ddd8' : '#4f5638';
+  switch (k) {
+    case 'truck': {
+      const c = shade(olive, 0.85 + sd * 0.3);
+      B(0, 0, 4, L, 6, S * 0.86, '#2a2a26');
+      B(L * 0.33, 0, 9, L * 0.28, 27, S * 0.92, c);
+      B(L * 0.475, 0, 22, 1.5, 9, S * 0.78, '#26303a');
+      B(L * 0.47, 0, 9, 3, 10, S * 0.9, shade(c, 0.6));
+      B(-L * 0.15, 0, 10, L * 0.62, 6, S, shade(c, 0.8));
+      B(-L * 0.15, 0, 16, L * 0.6, 22, S * 0.96, biome === 'snow' ? '#c9c7b8' : '#6b6a4a');
+      for (const lx of [L * 0.3, -L * 0.08, -L * 0.3]) for (const s of [-1, 1]) wheel(lx, s * S * 0.44, 9, 7);
+      break;
+    }
+    case 'tank': {
+      const c = shade(olive, 0.8 + sd * 0.3);
+      for (const s of [-1, 1]) B(0, s * S * 0.38, -2, L * 1.02, 15, S * 0.25, '#262622');
+      B(0, 0, 6, L * 0.96, 15, S * 0.74, c);
+      B(-L * 0.06, 0, 21, L * 0.44, 12, S * 0.58, shade(c, 1.08));
+      B(-L * 0.12, 0, 33, 10, 4, 10, shade(c, 0.8));
+      const [bx, bz] = at(L * 0.16, 0); cyl.add(mat(bx, gz + 27, bz, 2.6, L * 0.62, 2.6, ry, 0, -Math.PI / 2 + (rng() - 0.5) * 0.25), shade(c, 0.7), sid);
+      break;
+    }
+    case 'container': {
+      const c = shade(['#8a3b2c', '#2f5d7c', '#4f6b3a', '#a0742e', '#6d6f72'][Math.floor(rng() * 5)], 0.85 + sd * 0.25);
+      B(0, 0, -4, L, 64, S, c);
+      for (let x = -L / 2 + 8; x < L / 2 - 4; x += 11) B(x, 0, -2, 2.2, 60, S + 1.6, shade(c, 0.78));
+      B(L / 2, 0, -2, 1.6, 60, S * 0.98, shade(c, 0.6));
+      break;
+    }
+    case 'tent': {
+      const c = biome === 'snow' ? '#cfcab4' : biome === 'desert' ? '#b9a37a' : '#6f6a4c', rise = 38, run = S / 2, len = Math.hypot(rise, run), th = Math.atan2(rise, run);
+      B(0, 0, -1, L, 3, S, shade(c, 0.6));
+      for (const s of [-1, 1]) B(0, s * run / 2, rise / 2 - 1, L, 2, len, shade(c, s < 0 ? 0.95 : 1.1), s * th, 0);
+      B(L / 2 - 1, 0, 0, 1.5, rise * 0.8, S * 0.3, shade(c, 0.45));
+      break;
+    }
+    case 'barrel': {
+      const c = ['#5a6b3a', '#8a2f25', '#2f4a6b', '#7a6a3a'][Math.floor(rng() * 4)];
+      C(0, 0, -2, o.r, 30, shade(c, 0.85 + sd * 0.3));
+      for (const y of [7, 18]) C(0, 0, y, o.r + 0.6, 1.6, shade(c, 0.6));
+      break;
+    }
+    case 'hay': {
+      const [x, z] = at(0, -13); cyl.add(mat(x, gz + o.r - 2, z, o.r, 26, o.r, ry, Math.PI / 2), shade('#c9a75a', 0.85 + sd * 0.3), sid);
+      break;
+    }
+    case 'fence': {
+      const c = shade(biome === 'snow' ? '#5b4636' : '#6b5135', 0.85 + sd * 0.3);
+      for (let x = -L / 2 + 2; x <= L / 2; x += 30) B(x, 0, -4, 4, 32, 4, shade(c, 0.85));
+      for (const y of [9, 20]) B(0, 0, y, L, 3.5, 2.5, c);
+      break;
+    }
+    case 'well': {
+      C(0, 0, -4, o.r, 28, shade('#8d8778', 0.85 + sd * 0.3));
+      C(0, 0, 0, o.r * 0.72, 24.5, '#141413');
+      for (const s of [-1, 1]) B(0, s * o.r * 0.8, 20, 3, 34, 3, '#5b4430');
+      B(0, 0, 52, 4, 3, o.r * 1.9, '#5b4430');
+      B(0, 0, 55, o.r * 1.4, 2, o.r * 2.2, '#7a5c3a', 0.35);
+      break;
+    }
+    case 'bus': {
+      const c = shade(rng() < 0.5 ? '#c8a43a' : '#7b5a3a', 0.8 + sd * 0.3);
+      B(0, 0, 6, L, 42, S, c);
+      B(0, 0, 28, L * 0.92, 11, S + 1, '#23292d');
+      B(L / 2, 0, 18, 1.5, 20, S * 0.85, '#23292d');
+      B(0, 0, 48, L * 0.98, 2, S * 0.96, shade(c, 0.75));
+      for (const lx of [L * 0.32, -L * 0.3]) for (const s of [-1, 1]) wheel(lx, s * S * 0.44, 10, 7);
+      break;
+    }
+    case 'dumpster': {
+      const c = shade('#2f5a3a', 0.8 + sd * 0.3);
+      B(0, 0, -2, L, 30, S, c);
+      B(0, -S * 0.03, 28, L * 1.02, 2.5, S * 1.04, shade(c, 0.7), 0.12);
+      break;
+    }
+    case 'boat': {
+      const c = shade('#6b4a2e', 0.85 + sd * 0.3);
+      B(0, 0, -3, L * 0.9, 13, S, c);
+      B(L * 0.47, 0, -3, L * 0.12, 11, S * 0.55, c);
+      B(0, 0, 9, L * 0.78, 1.5, S * 0.7, shade(c, 0.55));
+      B(-L * 0.05, 0, 7, 4, 3, S * 0.9, shade(c, 0.8));
+      break;
+    }
+    case 'pole': {
+      C(0, 0, -6, 3.5, 196, '#5b4430');
+      B(0, 0, 176, 4, 4, 46, '#4a3828');
+      for (const s of [-1, 0, 1]) B(0, s * 18, 180, 2.5, 4, 2.5, '#d7d2c4');
+      break;
+    }
+    case 'bunker': {
+      const c = shade('#8a877c', 0.85 + sd * 0.25);
+      B(0, 0, -4, L, 40, S, c);
+      B(L / 2, 0, 20, 1.5, 6, S * 0.7, '#141413');
+      B(0, 0, 36, L * 1.06, 4, S * 1.06, shade(c, 0.85));
+      break;
+    }
+  }
+}
+
 // ---------- per-frame
 // No fog of war in the 3D view: every soldier is drawn and only walls, terrain and distance haze hide them.
 // (The minimap and the M map still show only enemies your team has spotted.)
@@ -917,6 +1030,12 @@ function cameraView(P) {
     return { fp: true, x: P.x, y: P.y, z: eyeZ(P) + bob, yaw, pitch };
   }
   let tgt = P.riding || spectateTarget();
+  // spectating in first person (V): through the teammate's eyes, with their gun
+  if (R3.specFP && tgt && !tgt.isCart && !P.riding) {
+    const fz = tgt.rfz ?? feetZ(tgt), yaw = tgt.ra ?? tgt.angle;
+    R3.specPitch = lerp(R3.specPitch ?? 0, clamp(tgt.pitch || 0, -1.4, 1.4), 0.3);
+    return { fp: true, who: tgt, x: tgt.rx ?? tgt.x, y: tgt.ry ?? tgt.y, z: fz + (tgt.crouch ? CFG.CROUCH_EYE : CFG.EYE), yaw, pitch: R3.specPitch };
+  }
   if (!tgt) return { fp: false, x: R3.lastCam ? R3.lastCam.x : W / 2, y: R3.lastCam ? R3.lastCam.y : H / 2, z: (R3.lastCam ? R3.lastCam.z : 200) + 0, yaw: R3.lastCam ? R3.lastCam.yaw : 0, pitch: -0.5 };
   const a = tgt.angle || 0, back = tgt.isCart ? 170 : 110, up = tgt.isCart ? 110 : 70;
   const fz = tgt.isCart ? elevAt(m, tgt.x, tgt.y) : feetZ(tgt);
@@ -975,7 +1094,7 @@ function render3d(dt) {
   // soldiers
   const seenIds = new Set();
   for (const s of G.soldiers) {
-    const show = soldierShown(s, P) && !(s === P && v.fp);
+    const show = soldierShown(s, P) && !(s === (v.who || P) && v.fp);
     if (!show) { const o = R3.soldiers.get(s.id); if (o) o.g.visible = false; continue; }
     const o = soldierObj(s), u = o.g.userData;
     o.g.visible = true; seenIds.add(s.id);
@@ -1020,8 +1139,20 @@ function render3d(dt) {
   gl3.autoClear = true;
   if (typeof postRender !== 'function' || !postRender(dt)) gl3.render(scene3, cam3);
 
+  // someone else's weapon: the kill cam or first-person spectating (a simple hip pose, kick and flash on their shots)
+  if (v.fp && v.who && v.who !== P && v.who.cls) {
+    const w = v.who;
+    if (!R3.vm || R3.vmCls !== w.cls.key || R3.vmTeam !== w.team) buildViewModel(w.cls.key, w.team);
+    const vm = R3.vm, st = G.time - (w.lastShotT ?? -9), kick = st >= 0 && st < 0.15 ? 1 - st / 0.15 : 0, rl = w.reloading ? 1 : 0;
+    const ph = w.rwp ?? w.walkPhase ?? 0, mv = Math.min(1, Math.hypot(w.vx || 0, w.vy || 0) / CFG.WALK);
+    vm.position.set(0.12 + Math.sin(ph) * 0.012 * mv, -0.11 - Math.abs(Math.cos(ph)) * 0.01 * mv - rl * 0.08, -0.2 + kick * 0.025);
+    vm.rotation.set(kick * 0.07 + rl * 0.45, 0.04, rl * 0.5);
+    const fl = vm.getObjectByName('flash'); fl.visible = st >= 0 && st < 0.05; fl.material.rotation = Math.random() * TAU;
+    gl3.autoClear = false; gl3.clearDepth(); gl3.render(vmScene, vmCam); gl3.autoClear = true;
+    R3.lastMag = -1;
+  }
   // own weapon
-  if (v.fp && !v.dead && !G.auto && !(P.scoped && R3.zoom > 1.5)) {
+  else if (v.fp && !v.dead && !v.who && !G.auto && !(P.scoped && R3.zoom > 1.5)) {
     if (!R3.vm || R3.vmCls !== P.cls.key || R3.vmTeam !== P.team) { buildViewModel(P.cls.key); R3.lastMag = P.mag; }
     const vm = R3.vm;
     if (P.mag < R3.lastMag && !P.reloading) { R3.kick = Math.min(1.2, R3.kick + (P.cls.key === 'sniper' ? 1.2 : P.cls.key === 'shotgun' ? 1.0 : 0.45)); R3.lastShotT = G.time; feelShot(P); }

@@ -87,7 +87,8 @@ const CFG = {
   STREAK_T: 8,                // kills within this many seconds of each other chain into multi-kills
   PARA_INTERVAL: 30,          // the only respawn: every 30 s up to PARA_N dead soldiers parachute over a held sector
   PARA_N: 5,
-  JUMP_V: 210, GRAV: 980,     // Space: jump about 1.1 m
+  JUMP_V: 198, GRAV: 680,     // Space: jump about 1.35 m, with a softer, floatier fall (0.56 s in the air)
+  SLIDE_BOOST: 1.5, SLIDE_DECAY: 2.6,   // C/Ctrl while sprinting: a slide at 1.5x your speed that dies off fast (about 0.8 s)
   VAULT_H: 44, VAULT_T: 48,   // Space next to cover at most this tall and this thick (px) vaults over it; windows too
   VAULT_TIME: 0.5,
   PARA_H: 400,                // drop height (20 m)
@@ -97,6 +98,9 @@ const CFG = {
 const OBST_H = {
   tree: 230, pine: 250, deadtree: 150, cactus: 52, bag: 22, crate: 30, log: 20, car: 32, barrier: 26, snowwall: 36,
   hwall: 64, window: 64, timber: 62, adobe: 66, concrete: 84, cabin: 60, hut: 54,
+  // props: wrecked vehicles, containers, camp gear, farm and street furniture (mapgen.js places them per biome)
+  truck: 44, tank: 40, container: 62, tent: 40, barrel: 28, hay: 26, fence: 26, well: 24, bus: 50, dumpster: 32,
+  boat: 18, pole: 190, bunker: 36,
 };
 const WIN_LO = 20, WIN_HI = 48;   // window opening, above the storey floor
 function obstHeight(o) {

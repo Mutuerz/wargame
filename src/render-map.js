@@ -314,10 +314,21 @@ function drawSolid(c, o, B) {
   } else if (k === 'snowwall') {
     c.fillStyle = '#b5c6d3'; c.fillRect(o.x, o.y, o.w, o.h);
     c.fillStyle = '#f4f8fa'; c.fillRect(o.x + 2, o.y + 2, o.w - 4, o.h - 6);
+  } else if (PROP_2D[k]) {   // props: a flat top-down shape with a darker outline
+    const [fill, edge] = PROP_2D[k];
+    c.fillStyle = edge; if (o.t === 'c') circle(c, o.x, o.y, o.r + 1.5); else c.fillRect(o.x - 1.5, o.y - 1.5, o.w + 3, o.h + 3);
+    c.fillStyle = fill; if (o.t === 'c') circle(c, o.x, o.y, o.r); else c.fillRect(o.x, o.y, o.w, o.h);
+    if (k === 'container' || k === 'bus') { c.fillStyle = 'rgba(0,0,0,0.18)'; if (o.w > o.h) for (let x = o.x + 10; x < o.x + o.w - 4; x += 14) c.fillRect(x, o.y, 2, o.h); else for (let y = o.y + 10; y < o.y + o.h - 4; y += 14) c.fillRect(o.x, y, o.w, 2); }
   } else {
     c.fillStyle = '#555'; if (o.t === 'c') circle(c, o.x, o.y, o.r); else c.fillRect(o.x, o.y, o.w, o.h);
   }
 }
+const PROP_2D = {
+  truck: ['#5b6142', '#2a2c22'], tank: ['#4f5638', '#23261a'], container: ['#7a5a3a', '#3a2a1c'], tent: ['#8a8160', '#4a4433'],
+  barrel: ['#5a6b3a', '#2c3420'], hay: ['#c9a75a', '#7d6634'], fence: ['#6b5135', '#3a2c1d'], well: ['#8d8778', '#4a4740'],
+  bus: ['#b8963a', '#4a3c18'], dumpster: ['#2f5a3a', '#16291b'], boat: ['#6b4a2e', '#33231a'], pole: ['#5b4430', '#2a2016'],
+  bunker: ['#8a877c', '#46443e'],
+};
 
 // Hill shading and contour lines from the height map (one pixel = 5 world px).
 function renderRelief(m) {

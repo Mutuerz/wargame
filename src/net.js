@@ -397,7 +397,8 @@ const NET = {
 function netMove(s, inp, dt) {
   let mvx = inp.mx || 0, mvy = inp.my || 0;
   const falling = s.para > 0;
-  if (inp.crouch && !falling) { mvx = 0; mvy = 0; }
+  slideCheck(s, inp.crouch, !((s.jz || 0) > 0.5));
+  if ((inp.crouch && !falling) || s.slide) { mvx = 0; mvy = 0; }
   const ml = Math.hypot(mvx, mvy);
   if (ml > 1) { mvx /= ml; mvy /= ml; }
   const moving = ml > 0.1;
@@ -408,11 +409,14 @@ function netMove(s, inp, dt) {
   if (inp.fire) speed *= 0.8;
   if (inp.ads && !s.reloading) speed *= CFG.ADS_SPEED;
   if (falling) speed = CFG.WALK * 0.6;
-  s.crouch = !!(inp.crouch && !falling);
-  if (inp.jump && !s.vault) tryJump(G.m, s, moving ? Math.atan2(mvy, mvx) : inp.angle);
+  s.crouch = !!(inp.crouch && !falling) || !!s.slide;
+  if (inp.jump && !s.vault && !s.slide) tryJump(G.m, s, moving ? Math.atan2(mvy, mvx) : inp.angle);
   if (s.vault) { vaultStep(G.m, s, dt); return; }
-  const k = 1 - Math.exp(-dt * 14);
-  s.vx = lerp(s.vx, mvx * speed, k); s.vy = lerp(s.vy, mvy * speed, k);
+  s.sprinting = sprint;
+  if (!slideStep(s, dt)) {
+    const k = 1 - Math.exp(-dt * 14);
+    s.vx = lerp(s.vx, mvx * speed, k); s.vy = lerp(s.vy, mvy * speed, k);
+  }
   const ox = s.x, oy = s.y;
   s.x += s.vx * dt; s.y += s.vy * dt;
   collideCircle(G.m, s, CFG.R, (s.z || 0) + (s.jz || 0));

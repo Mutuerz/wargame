@@ -289,6 +289,25 @@ function kill(s, killer, head) {
   if (s.bot) s.bot.role = null;
 }
 
+// ---------------- Slide: press crouch while sprinting on the ground. You shoot forward at 1.5x your speed, low like
+// a crouch, the speed dies off fast, and you cannot steer or jump until it is over. Shared with the online prediction.
+function slideCheck(s, crouch, grounded) {
+  if (crouch && !s.crouchPrev && s.sprinting && grounded && !s.slide && !(s.para > 0) && !s.vault) {
+    const sp = Math.hypot(s.vx, s.vy) || 1;
+    s.slide = { t: 0, dx: s.vx / sp, dy: s.vy / sp, v: Math.max(sp, CFG.SPRINT * 0.9) * CFG.SLIDE_BOOST };
+  }
+  s.crouchPrev = !!crouch;
+}
+function slideStep(s, dt) {
+  const sl = s.slide;
+  if (!sl) return false;
+  sl.t += dt;
+  const v = sl.v * Math.exp(-sl.t * CFG.SLIDE_DECAY);
+  if (v < CFG.WALK * 0.3 || s.para > 0 || s.vault || !s.alive) { s.slide = null; return false; }
+  s.vx = sl.dx * v; s.vy = sl.dy * v; s.crouch = true;
+  return true;
+}
+
 // ---------------- Soldier update (shared by player and bots)
 function updateSoldier(s, dt, ctl) {
   const m = G.m;
@@ -299,7 +318,8 @@ function updateSoldier(s, dt, ctl) {
   s.heat = Math.max(0, s.heat - dt * 0.08);
   let mvx = ctl.mx || 0, mvy = ctl.my || 0;
   // crouching (Ctrl): steadier aim, but you stay where you are
-  s.crouch = !!(ctl.crouch && !(s.para > 0));
+  slideCheck(s, ctl.crouch, !((s.jz || 0) > 0.5));
+  s.crouch = !!(ctl.crouch && !(s.para > 0)) || !!s.slide;
   if (s.crouch) { mvx = 0; mvy = 0; }
   const ml = Math.hypot(mvx, mvy);
   if (ml > 1) { mvx /= ml; mvy /= ml; }
@@ -307,7 +327,7 @@ function updateSoldier(s, dt, ctl) {
   const fire = ctl.fire;
   const sprint = ctl.sprint && moving && !fire && !s.reloading && !(ctl.scope && !s.cls.scopeRange) && !(s.para > 0);
   // stand still without shooting for STEADY_T seconds and the next shot is dead accurate; moving or jumping loses it
-  if (moving || (s.jz || 0) > 1 || s.para > 0) { s.steadyT = 0; s.steady = false; }
+  if (moving || s.slide || (s.jz || 0) > 1 || s.para > 0) { s.steadyT = 0; s.steady = false; }
   else if (fire) s.steadyT = 0;
   else if ((s.steadyT += dt) >= CFG.STEADY_T) s.steady = true;
 
@@ -337,10 +357,13 @@ function updateSoldier(s, dt, ctl) {
   if (fire) speed *= 0.8;
   if (s.ads) speed *= CFG.ADS_SPEED;
   if (s.para > 0) speed = CFG.WALK * 0.6;   // steering the parachute
-  if (ctl.jump && !s.vault) tryJump(m, s, moving ? Math.atan2(mvy, mvx) : s.angle);
+  if (ctl.jump && !s.vault && !s.slide) tryJump(m, s, moving ? Math.atan2(mvy, mvx) : s.angle);
   if (s.vault) { vaultStep(m, s, dt); s.fireCD -= dt; return; }   // no shooting mid-vault
-  const k = 1 - Math.exp(-dt * 14);
-  s.vx = lerp(s.vx, mvx * speed, k); s.vy = lerp(s.vy, mvy * speed, k);
+  s.sprinting = sprint;
+  if (!slideStep(s, dt)) {
+    const k = 1 - Math.exp(-dt * 14);
+    s.vx = lerp(s.vx, mvx * speed, k); s.vy = lerp(s.vy, mvy * speed, k);
+  }
   const ox = s.x, oy = s.y;
   s.x += s.vx * dt; s.y += s.vy * dt;
   collideCircle(m, s, CFG.R, (s.z || 0) + (s.jz || 0));
