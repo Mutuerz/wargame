@@ -24,8 +24,10 @@ body {
   user-select: none;
   -webkit-user-select: none;
 }
-#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: var(--bg); }
+#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: var(--bg); }
+#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: transparent; }
 #game.playing { cursor: none; }
+#game.playing.dead { cursor: default; }
 [hidden] { display: none !important; }
 
 .overlay {
@@ -137,7 +139,11 @@ input {
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 .dock-card { display: flex; flex-direction: column; gap: 10px; align-items: center; padding: 14px 18px; }
 #respawnText { font: 600 16px var(--display); }
+#respawnOpts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+#respawnOpts button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; text-align: left; }
+#respawnOpts button small { color: var(--dim); font-size: 11px; }
 #respawnOpts button.on { border-color: var(--blue); background: #12263b; }
+@media (max-width: 640px) { #respawnOpts { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
 /* Perks */
 .perk-card { width: min(720px, 100%); display: flex; flex-direction: column; gap: 16px; }
@@ -165,3 +171,28 @@ input {
   .brand h1 { font-size: 32px; }
   .perk-list, .over-stats { grid-template-columns: 1fr; }
 }
+
+/* Online lobby */
+.online-btn { padding: 11px; }
+.online-card { width: min(760px, 100%); display: flex; flex-direction: column; gap: 18px; }
+.net-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.net-form label, .net-controls label { display: flex; flex-direction: column; gap: 4px; font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+.net-form label.wide { grid-column: 1 / -1; }
+.net-form input { width: auto; }
+.net-form .row, .net-status { grid-column: 1 / -1; }
+.net-status { color: var(--accent); min-height: 1.5em; }
+.net-status.err { color: var(--red); }
+.net-room { display: flex; flex-direction: column; gap: 14px; }
+.net-teams { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.net-team { background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; min-height: 120px; }
+.net-team.blue { border-top: 3px solid var(--blue); } .net-team.red { border-top: 3px solid var(--red); }
+.net-team.blue h2 { color: var(--blue); } .net-team.red h2 { color: var(--red); }
+.net-team ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.net-team li { display: flex; justify-content: space-between; gap: 8px; }
+.net-team li small { color: var(--dim); }
+.net-team li.me { font-weight: 600; color: #fff; }
+.net-team li.bots { color: var(--dim); font-style: italic; }
+.net-controls { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.net-controls select, .net-controls input { font: 500 13px var(--mono); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 7px; text-transform: none; letter-spacing: 0; }
+#netStart { flex: 1; padding: 12px; }
+@media (max-width: 600px) { .net-form, .net-teams { grid-template-columns: 1fr; } }
