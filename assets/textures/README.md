@@ -14,3 +14,5 @@ These 512 x 512 color maps were generated for Bridgehead and are loaded by the e
 | `tire-rubber.png` | Vehicle wheels |
 
 The maps are color/albedo textures. Lighting and fine relief continue to come from the existing world lights and `src/surface.js` detail shader.
+
+`vehicle-paint.png` is neutral grey so each vehicle keeps its own colour (olive, desert tan, snow white, bus yellow); the texture only adds the paint grain. The ground maps are used as detail around the painted map's colours: the shader divides each map by its own average, so roads, mud and sector colours keep their hue and the photo adds blades, grains and pebbles.

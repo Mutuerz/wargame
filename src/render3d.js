@@ -60,9 +60,15 @@ function assetTexture(name, repeatX = 1, repeatY = 1) {
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(repeatX, repeatY);
   t.anisotropy = 8; // three clamps this to what the GPU supports
-  t.userData.keepAlive = true;
+  t.userData.keepAlive = true; t.userData.avg = new THREE.Vector3(1, 1, 1);
   new THREE.ImageLoader().load(`assets/textures/${name}.png`,
-    img => { t.image = img; t.needsUpdate = true; },
+    img => {
+      t.image = img; t.needsUpdate = true;
+      // average colour in linear light, so a shader can use the map as detail around the colour it already has
+      const c = document.createElement('canvas'); c.width = c.height = 1;
+      const g = c.getContext('2d'); g.drawImage(img, 0, 0, 1, 1); const d = g.getImageData(0, 0, 1, 1).data;
+      t.userData.avg.set(...[d[0], d[1], d[2]].map(v => Math.pow(v / 255, 2.2)));
+    },
     undefined,
     () => {
       const c = document.createElement('canvas'); c.width = c.height = 1;
