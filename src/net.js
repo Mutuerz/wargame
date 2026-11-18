@@ -275,7 +275,7 @@ const NET = {
     // inputs at a fixed rate, predicted locally right away
     this.acc += dt;
     let n = 0;
-    while (this.acc >= NET_STEP && n < 8) { this.acc -= NET_STEP; this.inputStep(); n++; }
+    while (this.acc >= NET_STEP && n < 8) { this.acc -= NET_STEP; if (this.pred) this.pp = { x: this.pred.x, y: this.pred.y, z: this.pred.z || 0, para: this.pred.para || 0, jz: this.pred.jz || 0, wp: G.player.walkPhase }; this.inputStep(); n++; }
     if (this.acc > NET_STEP * 8) this.acc = 0;
     if (G.over) return;
     // the clock we draw other entities at
@@ -294,6 +294,14 @@ const NET = {
       const nx = this.pred.x + this.off.x, ny = this.pred.y + this.off.y;
       P.walkPhase += Math.hypot(nx - P.x, ny - P.y) * 0.12;
       P.x = nx; P.y = ny; P.z = this.pred.z; P.para = this.pred.para || 0; P.jz = this.pred.jz || 0; P.vault = this.pred.vault; P.vx = this.pred.vx; P.vy = this.pred.vy;
+    }
+    // draw your own soldier between the last two 60 Hz prediction steps (smooth on 120-240 Hz screens)
+    feelInterpolate(1);
+    const pp = this.pp;
+    if (FEEL.on && P.alive && this.pred && pp && Math.abs(pp.x - this.pred.x) + Math.abs(pp.y - this.pred.y) < 60) {
+      const a = clamp(this.acc / NET_STEP, 0, 1);
+      P.rx = lerp(pp.x, this.pred.x, a) + this.off.x; P.ry = lerp(pp.y, this.pred.y, a) + this.off.y;
+      P.rfz = lerp(elevAt(G.m, pp.x, pp.y) + pp.z + pp.para + pp.jz, feetZ(P), a);
     }
     netUpdateBullets(dt);
     updateParticles(dt);

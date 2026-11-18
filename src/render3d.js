@@ -487,7 +487,9 @@ function makeSoldierModel(team, clsKey) {
   g.add(body);
   const leg = z => {
     const L = new THREE.Group(); L.position.set(0, 16, z);
-    L.add(new THREE.Mesh(SOLDIER_GEO.thigh, dark), new THREE.Mesh(SOLDIER_GEO.shin, dark), new THREE.Mesh(SOLDIER_GEO.knee, strap), new THREE.Mesh(SOLDIER_GEO.boot, boots));
+    const shin = new THREE.Group(); shin.position.y = -9; L.userData.shin = shin;   // knee joint
+    for (const mm of [new THREE.Mesh(SOLDIER_GEO.shin, dark), new THREE.Mesh(SOLDIER_GEO.knee, strap), new THREE.Mesh(SOLDIER_GEO.boot, boots)]) { mm.position.y = 9; shin.add(mm); }
+    L.add(new THREE.Mesh(SOLDIER_GEO.thigh, dark), shin);
     return L;
   };
   const legL = leg(-3.4), legR = leg(3.4);
@@ -522,6 +524,40 @@ function makeSoldierModel(team, clsKey) {
   g.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
   g.userData = { body, legL, legR, arms, chute, cls: clsKey, team };
   return g;
+}
+// Third-person animation (smooth feel): stride-matched walk and run cycles with knees, blended by speed,
+// legs swing toward the direction of travel (strafing, walking backwards), a forward lean when running,
+// a little body bob per footfall, and turning eased instead of snapping between network updates.
+function animateSoldier(s, o, u, dt) {
+  const x = s.rx ?? s.x, y = s.ry ?? s.y, fz = s.rfz ?? feetZ(s), a = s.ra ?? s.angle;
+  o.g.position.set(x, fz, y);
+  o.ang = o.ang === undefined ? a : o.ang + angDiff(o.ang, a) * (1 - Math.exp(-dt * 22));
+  o.g.rotation.y = -o.ang;
+  // velocity from what is drawn, smoothed (works for bots, predicted and interpolated soldiers alike)
+  if (o.lx !== undefined && dt > 0) {
+    const vx = (x - o.lx) / dt, vy = (y - o.ly) / dt, ok = Math.hypot(vx, vy) < 600, kk = 1 - Math.exp(-dt * 12);
+    o.vx = lerp(o.vx || 0, ok ? vx : 0, kk); o.vy = lerp(o.vy || 0, ok ? vy : 0, kk);
+  }
+  o.lx = x; o.ly = y;
+  const spd = Math.hypot(o.vx || 0, o.vy || 0), air = (s.jz || 0) > 2 && !(s.para > 0);
+  const walkT = s.para > 0 || s.crouch || air ? 0 : clamp(spd / CFG.WALK, 0, 1), runT = s.para > 0 || s.crouch || air ? 0 : clamp((spd - CFG.WALK) / (CFG.SPRINT - CFG.WALK), 0, 1);
+  o.wT = lerp(o.wT || 0, walkT, 1 - Math.exp(-dt * 10)); o.rT = lerp(o.rT || 0, runT, 1 - Math.exp(-dt * 6));
+  o.cT = lerp(o.cT || 0, s.crouch ? 1 : 0, 1 - Math.exp(-dt * 12)); o.aT = lerp(o.aT || 0, air ? 1 : 0, 1 - Math.exp(-dt * 14));
+  const rel = spd > 5 ? Math.atan2(o.vy, o.vx) - o.ang : 0, fwd = Math.cos(rel), side = Math.sin(rel);
+  const ph = s.rwp ?? s.walkPhase, A = lerp(0.42, 0.78, o.rT) * o.wT, B = lerp(0.55, 1.15, o.rT) * o.wT;
+  const leg = (L, p) => {
+    const sw = Math.sin(p) * A, kn = 0.08 * o.wT + B * Math.max(0, Math.cos(p)) * (fwd >= 0 ? 1 : 0.6);
+    L.rotation.z = sw * fwd; L.rotation.x = -sw * side * 0.7; L.userData.shin.rotation.z = -kn;
+  };
+  leg(u.legL, ph); leg(u.legR, ph + Math.PI);
+  // crouch (kneel) and jump (tuck) blend over the walk pose
+  const c = o.cT, t = o.aT;
+  u.legL.rotation.z = lerp(lerp(u.legL.rotation.z, 1.35, c), 0.9, t); u.legL.userData.shin.rotation.z = lerp(lerp(u.legL.userData.shin.rotation.z, -1.5, c), -1.1, t);
+  u.legR.rotation.z = lerp(lerp(u.legR.rotation.z, -0.35, c), 0.3, t); u.legR.userData.shin.rotation.z = lerp(lerp(u.legR.userData.shin.rotation.z, -1.2, c), -0.9, t);
+  u.body.position.y = -10 * c - Math.abs(Math.sin(ph)) * 0.9 * o.wT * (1 - c) + 0.4 * o.wT;
+  u.body.rotation.z = -0.16 * o.rT * fwd;   // lean into a run
+  u.body.rotation.x = 0.06 * o.rT * side;
+  u.arms.rotation.x = Math.sin(ph) * 0.05 * o.wT;
 }
 function soldierObj(s) {
   let o = R3.soldiers.get(s.id);
@@ -870,6 +906,10 @@ function cameraView(P) {
   if (P.alive) {
     const auto = G.auto;
     const yaw = auto ? P.angle : R3.look.yaw, pitch = auto ? P.pitch : R3.look.pitch;
+    if (FEEL.on && !auto) {
+      const f = feelCamera(P, R3.dt || 1 / 60), fz = P.rfz ?? feetZ(P);
+      return { fp: true, x: (P.rx ?? P.x) + f.dx, y: (P.ry ?? P.y) + f.dy, z: fz + (P.crouch ? CFG.CROUCH_EYE : CFG.EYE) + f.dz, yaw: yaw + f.yaw, pitch: pitch + f.pitch, roll: f.roll, fovAdd: f.fov };
+    }
     const moving = Math.hypot(P.vx, P.vy) > 20;
     const bob = moving ? Math.sin(P.walkPhase * 1.0) * 1.2 : 0;
     return { fp: true, x: P.x, y: P.y, z: eyeZ(P) + bob, yaw, pitch };
@@ -902,6 +942,8 @@ function render3d(dt) {
   if (R3.map !== m) { r3Build(m, G.art); R3.look.yaw = P.angle; R3.look.pitch = 0; }
   // camera
   if (R3.death) R3.death.t += Math.min(dt, 0.05);
+  R3.dt = dt;
+  feelResolution(dt);
   const v = cameraView(P);
   R3.lastCam = v;
   // hide your own body while the death camera lies where it fell
@@ -910,7 +952,7 @@ function render3d(dt) {
   const sh = reduce ? 0 : G.cam.shake * 0.4;
   R3.kick = Math.max(0, R3.kick - dt * 6);
   cam3.position.set(v.x + rand(-sh, sh), v.z + rand(-sh, sh) * 0.5, v.y + rand(-sh, sh));
-  cam3.rotation.set(v.pitch + R3.kick * 0.04, -v.yaw - Math.PI / 2, 0);
+  cam3.rotation.set(v.pitch + (FEEL.on ? 0 : R3.kick * 0.04), -v.yaw - Math.PI / 2, 0);
   if (v.roll) cam3.rotateZ(v.roll);
   G.cam.x = v.x; G.cam.y = v.y;
   SFX.listener.x = v.x; SFX.listener.y = v.y;
@@ -919,7 +961,7 @@ function render3d(dt) {
   const zoomT = v.dead ? 1 : v.fp && P.scoped ? CFG.SCOPE_ZOOM : v.fp && P.ads ? CFG.ADS_ZOOM : 1;
   R3.zoom = lerp(R3.zoom, zoomT, 1 - Math.exp(-dt * 14));
   if (Math.abs(R3.zoom - zoomT) < 0.02) R3.zoom = zoomT;
-  const fov = 2 * Math.atan(Math.tan(CFG.FOV * Math.PI / 360) / R3.zoom) * 180 / Math.PI;
+  const fov = 2 * Math.atan(Math.tan((CFG.FOV + (v.fovAdd || 0)) * Math.PI / 360) / R3.zoom) * 180 / Math.PI;
   if (Math.abs(cam3.fov - fov) > 0.01) { cam3.fov = fov; cam3.updateProjectionMatrix(); }
   R3.fov = fov;
   const fb = R3.fogBase, fz = R3.zoom > 1.5 ? 1.6 : 1;
@@ -935,20 +977,24 @@ function render3d(dt) {
     if (!show) { const o = R3.soldiers.get(s.id); if (o) o.g.visible = false; continue; }
     const o = soldierObj(s), u = o.g.userData;
     o.g.visible = true; seenIds.add(s.id);
+    if (FEEL.on) animateSoldier(s, o, u, dt);
+    else {
     o.g.position.set(s.x, feetZ(s), s.y);
     o.g.rotation.y = -s.angle;
     const moving = Math.hypot(s.vx || 0, s.vy || 0) > 15 || (o.lx !== undefined && Math.hypot(s.x - o.lx, s.y - o.ly) > 0.6);
     o.lx = s.x; o.ly = s.y;
     const sw = moving && !(s.para > 0) ? Math.sin(s.walkPhase) * 0.6 : 0;
+    u.body.rotation.set(0, 0, 0); u.legL.rotation.x = u.legR.rotation.x = 0; u.legL.userData.shin.rotation.z = u.legR.userData.shin.rotation.z = 0;
     if (s.crouch) { u.body.position.y = -10; u.legL.rotation.z = 1.35; u.legR.rotation.z = -0.25; }   // kneeling
     else if ((s.jz || 0) > 2 && !(s.para > 0)) { u.body.position.y = 0; u.legL.rotation.z = 0.9; u.legR.rotation.z = 0.3; }   // jumping / vaulting: legs tucked
     else { u.body.position.y = 0; u.legL.rotation.z = sw; u.legR.rotation.z = -sw; }
+    }
     u.chute.visible = s.para > 0;
     u.arms.rotation.z = (s.pitch || 0) + (s.reloading ? -0.6 : 0);
     // teammates: a marker above the head (seen through walls) with their name when close
     if (s.team === P.team && s !== P) {
       if (!o.mark) { o.mark = markerSprite(TEAMS[s.team].color); scene3.add(o.mark); }
-      o.mark.visible = dist(s.x, s.y, v.x, v.y) < 1100; o.mark.position.set(s.x, feetZ(s) + 50, s.y);
+      o.mark.visible = dist(s.x, s.y, v.x, v.y) < 1100; o.mark.position.set(s.rx ?? s.x, (s.rfz ?? feetZ(s)) + 50, s.ry ?? s.y);
     } else if (o.mark) o.mark.visible = false;
   }
   for (const [id, o] of R3.soldiers) if (!seenIds.has(id)) { o.g.visible = false; if (o.mark) o.mark.visible = false; }
@@ -965,15 +1011,17 @@ function render3d(dt) {
   if (v.fp && !v.dead && !G.auto && !(P.scoped && R3.zoom > 1.5)) {
     if (!R3.vm || R3.vmCls !== P.cls.key || R3.vmTeam !== P.team) { buildViewModel(P.cls.key); R3.lastMag = P.mag; }
     const vm = R3.vm;
-    if (P.mag < R3.lastMag && !P.reloading) { R3.kick = Math.min(1.2, R3.kick + (P.cls.key === 'sniper' ? 1.2 : P.cls.key === 'shotgun' ? 1.0 : 0.45)); R3.lastShotT = G.time; }
+    if (P.mag < R3.lastMag && !P.reloading) { R3.kick = Math.min(1.2, R3.kick + (P.cls.key === 'sniper' ? 1.2 : P.cls.key === 'shotgun' ? 1.0 : 0.45)); R3.lastShotT = G.time; feelShot(P); }
     R3.lastMag = P.mag;
     const moving = Math.hypot(P.vx, P.vy) > 20, sprint = moving && Math.hypot(P.vx, P.vy) > CFG.WALK * 1.15;
     const bx = moving ? Math.sin(P.walkPhase * 0.5) * 0.025 : 0, by = moving ? Math.abs(Math.cos(P.walkPhase * 0.5)) * 0.02 : Math.sin(performance.now() / 900) * 0.004;
     const rl = P.reloading ? Math.sin(clamp(1 - P.reloadT / P.reloadMax, 0, 1) * Math.PI) : 0;
     R3.adsT = lerp(R3.adsT || 0, P.ads ? 1 : 0, 1 - Math.exp(-dt * 14));
     const ad = R3.adsT;
-    vm.position.set(lerp(0.12 + bx + (sprint ? 0.03 : 0), 0, ad), lerp(-0.11 - by + (sprint ? -0.02 : 0), -0.062, ad) - rl * 0.1, lerp(-0.2, -0.17, ad) + R3.kick * 0.03 * (1 - ad * 0.5));
+    if (!feelWeapon(P, dt, vm, { ads: ad, sprint, reload: rl })) {
+        vm.position.set(lerp(0.12 + bx + (sprint ? 0.03 : 0), 0, ad), lerp(-0.11 - by + (sprint ? -0.02 : 0), -0.062, ad) - rl * 0.1, lerp(-0.2, -0.17, ad) + R3.kick * 0.03 * (1 - ad * 0.5));
     vm.rotation.set(R3.kick * 0.08 * (1 - ad * 0.6) + rl * 0.5 + (sprint ? -0.35 : 0), (sprint ? 0.5 : 0.04) * (1 - ad), rl * 0.6);
+    }
     const fl = vm.getObjectByName('flash');
     fl.visible = G.time - R3.lastShotT < 0.05; fl.material.rotation = Math.random() * TAU;
     animateViewModel();

@@ -427,9 +427,10 @@ function frame(now) {
   else if (G && !G.paused && !G.over) {
     acc += dt * SPEED;
     let n = 0;
-    while (acc >= STEP && n < SPEED * 6 + 2) { update(STEP); acc -= STEP; n++; if (G.over) break; }
+    while (acc >= STEP && n < SPEED * 6 + 2) { feelSnapshot(); update(STEP); acc -= STEP; n++; if (G.over) break; }
     if (acc > STEP * 10) acc = 0;
-  }
+    feelInterpolate(clamp(acc / STEP, 0, 1));
+  } else if (G && !G.online) feelInterpolate(1);
   if (G && G.player) {
     const P = G.player;
     if (lockFailed && !G.paused && !G.showMap && !G.over && mouse.x > 0) {
