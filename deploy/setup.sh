@@ -104,7 +104,7 @@ $DOMAIN {
 	# the game itself, so friends can just open https://$DOMAIN
 	handle {
 		root * $APP
-		@other not path / /index.html /src/*
+		@other not path / /index.html /src/* /sfx/*
 		respond @other 404
 		file_server
 	}
