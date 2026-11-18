@@ -53,11 +53,11 @@ On the deployment screen (this sets where the squad starts the match): left clic
   | Weapon | Magazine | Notes |
   | --- | --- | --- |
   | Assault rifle | 25 + 2 spares | All-round, reload 2.2 s (2.8 s from empty) |
-  | Sniper | 5 + 3 spares | 75 damage, 2600 px range, scope (see below), very bright muzzle flash |
-  | SMG | 30 + 2 spares | Very fast fire, short range (650 px), 10% faster movement |
+  | Sniper | 5 + 3 spares | 75 damage, 3120 px range, scope (see below), very bright muzzle flash |
+  | SMG | 30 + 2 spares | Very fast fire, short range (840 px), 10% faster movement |
   | Machine gun | 60 + 1 spare | Steady fire, 4.5 s reload, 15% slower movement |
-  | Shotgun | 6 + 3 spares | Pump action: 9 pellets in a wide cone. One shot kills up close; damage fades past about 110 px and pellets stop at 560 px |
-  | Machine pistol (sidearm, key 2) | 8 + 4 spares | Everyone carries it. Automatic, short range (650 px) |
+  | Shotgun | 6 + 3 spares | Pump action: 9 pellets in a wide cone. One shot kills up close; damage fades past about 110 px and pellets stop at 672 px |
+  | Machine pistol (sidearm, key 2) | 8 + 4 spares | Everyone carries it. Automatic, short range (780 px) |
 
   Holding the sniper scope roots the soldier in place, zooms the view out toward the cursor, extends vision in a narrow cone out to 1900 px and tightens accuracy. Your weapon shows above the health bar. Partly used magazines go back in your pouch.
 - **Air strike:** once your team pool has 500 points, press B (the HUD shows AIR STRIKE READY) and click a target, on screen or on the full map. The strike is announced to both teams: a 380 × 150 px rectangle appears on the ground, on the minimap and on the map with a 10 second countdown and warning beeps. Then a bomber passes over and everything still inside the rectangle takes 130 damage, friend or foe, carts included, and house walls inside it collapse. The 500 points come out of the same pool that perks will use. One strike per team at a time. Red's commander calls strikes too, on groups of Blue soldiers it can see, and bots run out of any marked zone.
