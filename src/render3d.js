@@ -1200,7 +1200,7 @@ function render3d(dt) {
   cam3.rotation.set(v.pitch + (FEEL.on ? 0 : R3.kick * 0.04), -v.yaw - Math.PI / 2, 0);
   if (v.roll) cam3.rotateZ(v.roll);
   G.cam.x = v.x; G.cam.y = v.y;
-  SFX.listener.x = v.x; SFX.listener.y = v.y;
+  SFX.tick(v, dt);   // your ears follow the camera: position, height and facing
   R3.camElev = v.z;
   // scope zoom
   const VW_ = v.who || P;   // whose eyes: yours, or the kill cam / first-person spectating target

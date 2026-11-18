@@ -227,10 +227,10 @@ const NET = {
       if (sniper === 3) return;   // extra shotgun pellets: one flash and one bang per shot
       G.particles.push({ type: 'flash', x, y, z: z || undefined, a: Math.atan2(vy, vx), life: sniper === 1 ? 0.14 : 0.05, max: sniper === 1 ? 0.14 : 0.05, big: sniper === 1 });
       if (Math.random() < 0.5) { const a = Math.atan2(vy, vx); stampCasing(G.art, x - Math.cos(a) * 26 + Math.cos(a + 1.6) * 16, y - Math.sin(a) * 26 + Math.sin(a + 1.6) * 16); }
-      if (sniper === 2) SFX.shotgun(x, y, owner === P.id, owner === P.id ? () => P.alive && P.mag > 0 && !!P.cls.pellets : null);
-      else if (sniper === 1) SFX.sniper(x, y, owner === P.id);
-      else if (os && os.cls && os.cls.key === 'smg') SFX.smg(x, y, owner === P.id);
-      else SFX.shot(x, y, owner === P.id);
+      if (sniper === 2) SFX.shotgun(x, y, owner === P.id, owner === P.id ? () => P.alive && P.mag > 0 && !!P.cls.pellets : null, z);
+      else if (sniper === 1) SFX.sniper(x, y, owner === P.id, z);
+      else if (os && os.cls && os.cls.key === 'smg') SFX.smg(x, y, owner === P.id, z);
+      else SFX.shot(x, y, owner === P.id, z);
     } else if (k === 'hit') {
       const [, tid, aid, x, y, hx, hy, hz, hh] = e;
       if (aid === P.id && hz !== undefined) pelletMark(hx, hy, hz, !!hh);

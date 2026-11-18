@@ -47,6 +47,7 @@ window.addEventListener('keydown', e => {
   else if (!G.player.alive && e.code === 'ArrowLeft') G.specIdx--;
   else if (e.code === 'KeyM') { G.showMap = !G.showMap; G.mapForStrike = false; }
   else if (e.code === 'KeyP') togglePerks();
+  else if (e.code === 'KeyN' && e.shiftKey) message('Sound: ' + SFX.cycleMode(), '#8e9b92', 3);
   else if (e.code === 'KeyN') { const on = SFX.toggle(); message(on ? 'Sound on' : 'Sound muted', '#8e9b92', 1.5); }
   else if (e.code === 'Tab') G.showScores = true;
 });

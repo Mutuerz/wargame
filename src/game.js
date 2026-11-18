@@ -174,10 +174,10 @@ function shoot(s, moving) {
   const sn = s.cls === CLASSES.sniper;   // the sniper's muzzle flash is much brighter and easier to spot
   G.particles.push({ type: 'flash', x: mx, y: my, z: mz, a: s.angle, life: sn ? 0.14 : 0.05, max: sn ? 0.14 : 0.05, big: sn });
   if (Math.random() < 0.5) stampCasing(G.art, s.x + Math.cos(s.angle + 1.6) * 16, s.y + Math.sin(s.angle + 1.6) * 16);
-  if (s.cls.pellets) SFX.shotgun(s.x, s.y, s.isPlayer, () => s.alive && s.mag > 0 && s.cls.pellets);
-  else if (s.cls === CLASSES.sniper && SFX.sniper) SFX.sniper(s.x, s.y, s.isPlayer);
-  else if (s.cls.key === 'smg' && SFX.smg) SFX.smg(s.x, s.y, s.isPlayer);
-  else SFX.shot(s.x, s.y, s.isPlayer);
+  if (s.cls.pellets) SFX.shotgun(mx, my, s.isPlayer, () => s.alive && s.mag > 0 && s.cls.pellets, mz);
+  else if (s.cls === CLASSES.sniper && SFX.sniper) SFX.sniper(mx, my, s.isPlayer, mz);
+  else if (s.cls.key === 'smg' && SFX.smg) SFX.smg(mx, my, s.isPlayer, mz);
+  else SFX.shot(mx, my, s.isPlayer, mz);
 }
 
 // Heights in the world: the floor a soldier stands on, and their eyes.
@@ -446,7 +446,7 @@ function doAction(s, a) {
 }
 
 function explode(x, y, radius, maxDmg, attacker, z) {
-  SFX.boom(x, y);
+  SFX.boom(x, y, z);
   if (z === undefined) z = elevAt(G.m, x, y) + 6;
   for (const s of G.soldiers) {
     if (!s.alive || (attacker && s.team === attacker.team && s !== attacker)) continue;
