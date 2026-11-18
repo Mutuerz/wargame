@@ -351,8 +351,8 @@ function updateRespawnDock() {
   const specTxt = spec && !P.riding ? ` Spectating ${spec.name}: click or Space to switch.` : '';
   if (P.riding) msg = `Riding the transport to sector ${P.riding.target.name} (${Math.ceil(P.riding.hp)} HP). Press E to jump out early.`;
   else {
-    const held = G.m.points.filter(p => p.owner === t).length;
-    msg = `You were killed. Next parachute drop in ${Math.ceil(tm.paraT || 0)} s (up to ${CFG.PARA_N} soldiers, first killed first) ${held ? 'over a sector we hold' : 'over our base, since we hold no sector'}.` + specTxt;
+    const held = G.m.points.filter(p => fullyHeld(p, t)).map(p => p.name);
+    msg = `You were killed. Next parachute drop in ${Math.ceil(tm.paraT || 0)} s (up to ${CFG.PARA_N} soldiers, first killed first) ${held.length ? `over a fully controlled sector (${held.join(', ')})` : 'over our base, since no sector is fully under our control'}.` + specTxt;
   }
   $('respawnText').textContent = msg;
 }

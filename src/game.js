@@ -598,6 +598,8 @@ function updateSupply(dt) {
   G.caches = G.caches.filter(c => c.charges > 0);
 }
 
+// A sector counts for respawns only when it is fully controlled: owned, at 100% and with no enemy inside.
+function fullyHeld(p, t) { return p.owner === t && (t === 0 ? p.prog >= 99.9 : p.prog <= -99.9) && (t === 0 ? p.c1 : p.c0) === 0; }
 // The only respawn: every PARA_INTERVAL s the first PARA_N soldiers to have died parachute in 20 m above
 // the flag of a sector the team holds (over the home base if it holds none).
 function updateParachutes(t, dt) {
@@ -607,7 +609,7 @@ function updateParachutes(t, dt) {
   tm.paraT = CFG.PARA_INTERVAL;
   const dead = G.soldiers.filter(s => s.team === t && !s.alive && !s.riding).sort((a, b) => (a.diedAt || 0) - (b.diedAt || 0)).slice(0, CFG.PARA_N);
   if (!dead.length) return;
-  const held = m.points.filter(p => p.owner === t);
+  const held = m.points.filter(p => fullyHeld(p, t));
   const zones = held.length ? held : m.spawns[t].map(sp => ({ x: sp.x, y: sp.y, name: 'base' }));
   for (const s of dead) {
     const p = pickRand(zones);
@@ -616,7 +618,7 @@ function updateParachutes(t, dt) {
     f = f || randomFreeNear(m, p.x, p.y, 160);
     spawnSoldier(s, { type: 'at', x: f.x, y: f.y });
     s.x = f.x; s.y = f.y; s.para = CFG.PARA_H; s.shield = CFG.SPAWN_SHIELD;
-    msgTo(s, p.name === 'base' ? 'Parachuting into our base (we hold no sector)' : `Parachuting into sector ${p.name}`, TEAMS[t].color, 3);
+    msgTo(s, p.name === 'base' ? 'Parachuting into our base (no sector fully under our control)' : `Parachuting into sector ${p.name}`, TEAMS[t].color, 3);
   }
   feedFor(t, `${dead.length} soldier${dead.length > 1 ? 's' : ''} parachuting in`, TEAMS[t].color);
 }
