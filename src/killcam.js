@@ -62,13 +62,15 @@ function kcUpdate(dt) {
   if (!KC.on && KC.clip && (!P.alive || P.para > 0) && (R3.death ? R3.death.t >= 2.2 : KC.wait <= 0)) KC.on = true;   // after the 2.2 s death fall
   if (!KC.on) return;
   if (KC.intro > 0) { KC.intro -= dt; return; }   // best play: the name card holds the first frame
-  KC.t += dt * (kcSlow() ? 0.35 : 1);   // slow motion around the killing shot (each kill, in a highlight)
+  KC.t += dt * (kcSlow() ? 0.35 : kcFast() ? HL_FF : 1);   // slow motion around each kill; a best play fast-forwards the quiet gaps between kills
   if (KC.t >= KC.t1 + 0.4) kcStop();
 }
+function kcFast() { return KC.hl && KC.slowAt.length > 1 && KC.t > KC.slowAt[0] && KC.t < KC.slowAt[KC.slowAt.length - 1] - 1.5 && KC.slowAt.every(t => Math.abs(KC.t - t) > 1.5); }
 function kcSlow() { return KC.slowAt.some(t => KC.t > t - 0.5 && KC.t < t + 0.25); }
 function kcStop() {
   const hl = KC.hl;
   KC.on = false; KC.clip = null; KC.killer = null; KC.hl = false; KC.intro = 0;
+  if (hl && SFX.bestEnd) SFX.bestEnd();   // replay over: the music stops looping and plays out its ending
   if (hl && G && G.over) $('over').hidden = false;   // highlight over: back to the results
 }
 
@@ -136,11 +138,20 @@ function kcOverlay() {
   if (KC.hl) {   // kill counter: ticks up as each kill of the streak happens in the replay
     const n = KC.slowAt.filter(t => KC.t >= t).length;
     if (n) txt(n >= 2 ? HL_NAMES[Math.min(n, 5)] : '1 KILL', VW / 2, bar + 46, `800 34px ${D}`, '#ffd27a', 'center', 'middle');
+    // the streak so far, one line per kill as it happens: ✕ name
+    const nm = (HL.best && HL.best.names) || [];
+    for (let i = 0; i < n && i < nm.length; i++) {
+      const a = clamp((KC.t - KC.slowAt[i]) * 4, 0, 1);
+      ctx.save(); ctx.globalAlpha = a;
+      txt(`${i + 1}  ✕  ${nm[i]}`, 28 - (1 - a) * 20, bar + 40 + i * 26, `700 16px ${D}`, i === n - 1 ? '#ffffff' : '#c9cfc6', 'left', 'middle');
+      ctx.restore();
+    }
   }
   txt(KC.hl ? 'Space to skip' : G.player.alive ? 'Parachuting in · Space to skip' : 'Space to skip', VW - 24, bar / 2, `500 13px "IBM Plex Mono", monospace`, '#b8c0b4', 'right', 'middle');
   const p = clamp((KC.t - KC.t0) / Math.max(0.1, KC.t1 - KC.t0), 0, 1);
   ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(VW * 0.3, VH - bar / 2 - 2, VW * 0.4, 4);
   ctx.fillStyle = '#ff5a4e'; ctx.fillRect(VW * 0.3, VH - bar / 2 - 2, VW * 0.4 * p, 4);
+  if (kcFast()) txt('FAST FORWARD ▸▸', VW / 2, VH - bar - 18, `700 13px ${D}`, '#b8c0b4', 'center', 'middle');
   if (kcSlow()) txt('SLOW MOTION', VW / 2, VH - bar - 18, `700 13px ${D}`, '#ffd27a', 'center', 'middle');
 }
 
@@ -154,16 +165,16 @@ window.addEventListener('keydown', e => {
 // it beats the best so far, the frames around it are kept. Online the server tells every client about each
 // multi-kill ('mk' event), so everyone saves and replays the same moment from their own recording.
 const HL = { g: null, frames: [], acc: 0, pend: new Map(), best: null };
-const HL_LEN = 16, HL_PRE = 2, HL_POST = 1.6, HL_INTRO = 2.6;
+const HL_LEN = 40, HL_PRE = 2, HL_POST = 1.6, HL_INTRO = 2.6, HL_FF = 2.5;   // 40 s keeps a whole penta (kills up to 8 s apart)
 const HL_NAMES = ['', '', 'DOUBLE KILL', 'TRIPLE KILL', 'QUADRA KILL', 'PENTA KILL'];
 
 function hlReset() { if (SFX.bestStop) SFX.bestStop(); HL.g = G; HL.frames = []; HL.acc = 0; HL.pend.clear(); HL.best = null; }
 // a soldier just made kill number n of a streak; ages = how long ago each kill of the streak was
-function hlNote(s, n, ages) {
+function hlNote(s, n, ages, names = []) {
   if (!G) return;
   if (HL.g !== G) hlReset();
   const kills = ages.map(a => G.time - a);
-  HL.pend.set(s, { s, n, kills, due: G.time + HL_POST });
+  HL.pend.set(s, { s, n, kills, names, due: G.time + HL_POST });
 }
 function hlBetter(p) {
   const b = HL.best;
@@ -175,7 +186,8 @@ function hlKeep(p) {
   const from = Math.max(p.kills[0] - HL_PRE, G.time - HL_LEN);
   const clip = HL.frames.filter(f => f.t >= from);
   if (clip.length < 10) return;
-  HL.best = { s: p.s, n: p.n, kills: p.kills.filter(t => t >= from), clip, name: p.s.name, cls: p.s.cls ? p.s.cls.name : '', team: p.s.team };
+  const keep = p.kills.map(t => t >= from);
+  HL.best = { s: p.s, n: p.n, kills: p.kills.filter((t, i) => keep[i]), names: p.names.filter((v, i) => keep[i]), clip, name: p.s.name, cls: p.s.cls ? p.s.cls.name : '', team: p.s.team };
 }
 function hlRecord(dt) {
   if (!G || !G.soldiers) return;
@@ -212,7 +224,7 @@ function hlPlay() {
   KC.t0 = b.clip[0].t; KC.t1 = b.clip[b.clip.length - 1].t; KC.t = KC.t0;
   KC.label = `${b.name}${b.cls ? ' · ' + b.cls : ''} · ${TEAMS[b.team].name}`;
   KC.hl = true; KC.on = true; KC.intro = HL_INTRO;
-  if (SFX.bestPlay) SFX.bestPlay();
+  if (SFX.bestPlay) SFX.bestPlay(true);
   return true;
 }
 

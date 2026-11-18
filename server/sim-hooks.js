@@ -32,7 +32,7 @@ feedFor = function (team, text, color) { emit('t' + team, ['f', text, color]); }
 killStreak = function (s, n, head, v) {
   if (s.human) emit('s' + s.id, ['ks', n, head ? 1 : 0, v ? killDist(s, v) : -1, v ? v.name : '']);
   // every client records the match and keeps the best multi-kill for the end-of-match replay
-  if (n >= 2) emit('a', ['mk', s.id, n, (s.mkT || []).map(t => +(G.time - t).toFixed(2))]);
+  if (n >= 2) emit('a', ['mk', s.id, n, (s.mkT || []).map(t => +(G.time - t).toFixed(2)), s.mkV || []]);
 };
 
 const _shoot = shoot;

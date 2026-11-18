@@ -259,7 +259,7 @@ const NET = {
     else if (k === 'cap') { G.stats.captures[e[1]]++; SFX.capture(e[1] === P.team); }
     else if (k === 'm') { message(e[1], e[2], e[3]); if (e[4]) SFX.pickup(); }
     else if (k === 'f') feed(e[1], e[2]);
-    else if (k === 'mk') { const s = G.soldiers.find(q => q.id === e[1]); if (s) hlNote(s, e[2], e[3] || []); }
+    else if (k === 'mk') { const s = G.soldiers.find(q => q.id === e[1]); if (s) hlNote(s, e[2], e[3] || [], e[4] || []); }
     else if (k === 'ks') announceKill(e[1], !!e[2], e[3] >= 0 ? e[3] : null, e[4] || '');
   },
 

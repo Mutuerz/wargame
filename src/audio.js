@@ -79,13 +79,17 @@ const SFX = {
   },
   knife() { if (this.ok()) { this.tone(0.12, 1400, 500, 0.09, 'sawtooth'); } },   // swing whoosh
   // end-of-match music under the best-play replay; stops if the replay is skipped
-  bestPlay() {
+  // loop: repeat the first 6.4 s (before the clip's own fade) until bestEnd(), so a long replay never runs out of music
+  bestPlay(loop) {
     this.bestStop();
     if (!this.ok() || !this.bestClip) return;
     const c = this.ctx, src = c.createBufferSource(), g = c.createGain();
-    src.buffer = this.bestClip; g.gain.value = 0.9; src.connect(g); g.connect(this.master); src.start();
+    src.buffer = this.bestClip; g.gain.value = 0.9; src.connect(g); g.connect(this.master);
+    if (loop) { src.loop = true; src.loopStart = 0; src.loopEnd = 6.4; }
+    src.start();
     this.bestSrc = { src, g };
   },
+  bestEnd() { if (this.bestSrc) this.bestSrc.src.loop = false; },
   bestStop() {
     const b = this.bestSrc; this.bestSrc = null;
     if (!b) return;
