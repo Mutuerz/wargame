@@ -51,6 +51,34 @@ const UCONE = new THREE.ConeGeometry(1, 1, 9).translate(0, 0.5, 0);
 const USPH = new THREE.IcosahedronGeometry(1, 1);
 const UROCK = new THREE.DodecahedronGeometry(1, 0);
 const lam = (c, o = {}) => new THREE.MeshLambertMaterial(Object.assign({ color: c }, o));
+// Load a color map from assets/textures/. If it cannot load (for example index.html opened from disk, where the
+// browser blocks images for WebGL), fall back to a white pixel so the material keeps its plain vertex color instead
+// of rendering black. Shared with surface.js.
+function assetTexture(name, repeatX = 1, repeatY = 1) {
+  const t = new THREE.Texture();
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(repeatX, repeatY);
+  t.anisotropy = 8; // three clamps this to what the GPU supports
+  t.userData.keepAlive = true;
+  new THREE.ImageLoader().load(`assets/textures/${name}.png`,
+    img => { t.image = img; t.needsUpdate = true; },
+    undefined,
+    () => {
+      const c = document.createElement('canvas'); c.width = c.height = 1;
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 1, 1);
+      t.image = c; t.needsUpdate = true;
+      console.warn(`texture ${name}.png did not load; using plain colors`);
+    });
+  return t;
+}
+const WORLD_TEX = {
+  bark: assetTexture('bark', 1, 2),
+  leaves: assetTexture('leaves', 2, 2),
+  paint: assetTexture('vehicle-paint', 1, 1),
+  rubber: assetTexture('tire-rubber', 1, 1),
+};
+const texturedLam = (texture, opts = {}) => lam('#ffffff', Object.assign({ map: texture }, opts));
 const col3 = c => new THREE.Color(c);
 const _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(), _v = new THREE.Vector3(), _s = new THREE.Vector3(), _e = new THREE.Euler();
 function mat(x, y, z, sx, sy, sz, ry = 0, rx = 0, rz = 0) {
@@ -184,6 +212,10 @@ function r3Build(m, art) {
   // obstacles
   const box = new Batch(UBOX, lam('#ffffff')), cyl = new Batch(UCYL, lam('#ffffff')), cone = new Batch(UCONE, lam('#ffffff'));
   const sph = new Batch(USPH, lam('#ffffff', { flatShading: true })), rock = new Batch(UROCK, lam('#ffffff', { flatShading: true }));
+  const bark = new Batch(UCYL, texturedLam(WORLD_TEX.bark));
+  const leaves = new Batch(USPH, texturedLam(WORLD_TEX.leaves, { flatShading: true }));
+  const vehicle = new Batch(UBOX, texturedLam(WORLD_TEX.paint));
+  const rubber = new Batch(UCYL, texturedLam(WORLD_TEX.rubber));
   const wallCol = k => WALL_COLORS[k] ? WALL_COLORS[k][1] : '#999';
   for (const o of m.solids) {
     const k = o.kind, gz = o.gz, sd = o.seed || 0.5, sid = o.sid;
@@ -203,14 +235,14 @@ function r3Build(m, art) {
     switch (k) {
       case 'tree': {
         const r = o.r;
-        cyl.add(mat(cx, gz - sink, cy, r * 0.32, 95 + sink, r * 0.32), '#4b3626', sid);
-        sph.add(mat(cx, gz + 120 + sd * 20, cy, r * 2.0, r * 1.7, r * 2.0, sd * 6), shade(B.treeMid, 0.9 + sd * 0.25), sid);
-        sph.add(mat(cx + r * 0.5, gz + 165 + sd * 15, cy - r * 0.3, r * 1.4, r * 1.3, r * 1.4, sd * 3), shade(B.treeHi, 0.85 + sd * 0.2), sid);
+        bark.add(mat(cx, gz - sink, cy, r * 0.32, 95 + sink, r * 0.32), '#ffffff', sid);
+        leaves.add(mat(cx, gz + 120 + sd * 20, cy, r * 2.0, r * 1.7, r * 2.0, sd * 6), shade('#ffffff', 0.9 + sd * 0.2), sid);
+        leaves.add(mat(cx + r * 0.5, gz + 165 + sd * 15, cy - r * 0.3, r * 1.4, r * 1.3, r * 1.4, sd * 3), shade('#ffffff', 0.95 + sd * 0.15), sid);
         break;
       }
       case 'pine': {
         const r = o.r;
-        cyl.add(mat(cx, gz - sink, cy, r * 0.28, 70 + sink, r * 0.28), '#3d2c1f', sid);
+        bark.add(mat(cx, gz - sink, cy, r * 0.28, 70 + sink, r * 0.28), '#ffffff', sid);
         cone.add(mat(cx, gz + 50, cy, r * 2.1, 110, r * 2.1, sd * 6), shade(B.tree, 1 + sd * 0.3), sid);
         cone.add(mat(cx, gz + 115, cy, r * 1.6, 95, r * 1.6, sd * 4), shade(B.treeMid, 1 + sd * 0.3), sid);
         cone.add(mat(cx, gz + 175, cy, r * 1.0, 75, r * 1.0), m.biome === 'snow' ? '#eef3f5' : shade(B.treeMid, 1.2), sid);
@@ -218,7 +250,7 @@ function r3Build(m, art) {
       }
       case 'deadtree': {
         const r = o.r;
-        cyl.add(mat(cx, gz - sink, cy, r * 0.45, 140 + sink, r * 0.45), '#3b3424', sid);
+        bark.add(mat(cx, gz - sink, cy, r * 0.45, 140 + sink, r * 0.45), '#b4a18a', sid);
         box.add(mat(cx, gz + 80, cy, 4, 60, 4, sd * 6, 0.7), '#3b3424', sid);
         box.add(mat(cx, gz + 105, cy, 3, 45, 3, sd * 6 + 2, -0.6), '#3b3424', sid);
         break;
@@ -245,14 +277,22 @@ function r3Build(m, art) {
       case 'barrier': box.add(mat(cx, gz - 4, cy, o.w, o.z1 + 4, o.h), '#9b9890', sid); break;
       case 'snowwall': box.add(mat(cx, gz - 6, cy, o.w, o.z1 + 6, o.h), '#f2f6f8', sid); break;
       case 'car': {
-        const c = pickR(mulberry32((sd * 1e9) >>> 0), ['#5c3b2e', '#4d5459', '#6b5a3a', '#3e4a3c']);
-        box.add(mat(cx, gz - 2, cy, o.w, 18, o.h), c, sid);
-        box.add(mat(cx, gz + 16, cy, o.w > o.h ? o.w * 0.55 : o.w * 0.9, 14, o.w > o.h ? o.h * 0.9 : o.h * 0.55), shade(c, 0.7), sid);
+        const longX = o.w >= o.h, L = Math.max(o.w, o.h), S = Math.min(o.w, o.h);
+        const c = pickR(mulberry32((sd * 1e9) >>> 0), ['#a9b0a4', '#89938a', '#b3a68a', '#8e969b']);
+        vehicle.add(mat(cx, gz - 2, cy, o.w, 18, o.h), c, sid);
+        vehicle.add(mat(cx, gz + 16, cy, longX ? L * 0.55 : S * 0.88, 14, longX ? S * 0.88 : L * 0.55), shade(c, 0.84), sid);
+        box.add(mat(cx + (longX ? L * 0.49 : S * 0.49), gz + 7, cy, 2, 7, S * 0.75, 0), '#333a3c', sid);
+        const wr = Math.max(6, Math.min(10, S * 0.19)), ww = Math.max(5, Math.min(8, S * 0.15));
+        for (const along of [-1, 1]) for (const side of [-1, 1]) {
+          const wx = cx + (longX ? along * L * 0.3 : side * S * 0.46);
+          const wz = cy + (longX ? side * S * 0.46 : along * L * 0.3);
+          rubber.add(mat(wx, gz + wr - 2, wz, wr, ww, wr, 0, longX ? Math.PI / 2 : 0, longX ? 0 : Math.PI / 2), '#ffffff', sid);
+        }
         break;
       }
       case 'truck': case 'tank': case 'container': case 'tent': case 'barrel': case 'hay': case 'fence': case 'well':
       case 'bus': case 'dumpster': case 'boat': case 'pole': case 'bunker':
-        buildProp(o, k, cx, cy, gz, sd, sid, { box, cyl, cone, sph }, m.biome); break;
+        buildProp(o, k, cx, cy, gz, sd, sid, { box, cyl, cone, sph, vehicle, rubber }, m.biome); break;
       default: box.add(mat(cx, gz - 4, cy, o.t === 'c' ? o.r * 2 : o.w, o.z1 + 4, o.t === 'c' ? o.r * 2 : o.h), '#777', sid);
     }
   }
@@ -306,7 +346,7 @@ function r3Build(m, art) {
     cyl.add(mat(d.x + 70, e, d.y - 50, 2, 150, 2), '#cccccc');
     box.add(mat(d.x + 70 + (t === 0 ? 22 : -22), e + 120, d.y - 50, 44, 28, 1.5), TEAMS[t].color);
   });
-  for (const bt of [box, cyl, cone, sph, rock]) bt.build(world);
+  for (const bt of [box, cyl, cone, sph, rock, bark, leaves, vehicle, rubber]) bt.build(world);
 
   // sector borders: a line on the ground along every edge between two sectors (and around the bases)
   if (m.sector) {
@@ -341,7 +381,7 @@ function r3Build(m, art) {
   buildTracers(world);
   buildWeather(world, m.biome);
   R3.decalMesh = null;
-  if (typeof surfaceWorld === 'function') surfaceWorld(world, terrain);
+  if (typeof surfaceWorld === 'function') surfaceWorld(world, terrain, m.biome);
 }
 
 function roofGeometry(L, S, rise) {
@@ -362,7 +402,7 @@ function roofGeometry(L, S, rise) {
 function disposeTree(o) {
   o.traverse(n => {
     if (n.geometry && ![UBOX, UCYL, UCONE, USPH, UROCK].includes(n.geometry)) n.geometry.dispose();
-    if (n.material) { const ms = Array.isArray(n.material) ? n.material : [n.material]; for (const mm of ms) { if (mm.map && mm.map !== DOT) mm.map.dispose(); mm.dispose(); } }
+    if (n.material) { const ms = Array.isArray(n.material) ? n.material : [n.material]; for (const mm of ms) { if (mm.map && mm.map !== DOT && !mm.map.userData.keepAlive) mm.map.dispose(); mm.dispose(); } }
   });
 }
 
@@ -913,32 +953,33 @@ function updateWeather(dt, cx, cz) {
 // ---------- props (vehicles, containers, camp gear...): built from the shared instanced boxes and cylinders, so a
 // hundred of them cost a handful of draw calls. Long axis = the rect's long side; local +x is the front.
 function buildProp(o, k, cx, cy, gz, sd, sid, B3, biome) {
-  const { box, cyl, cone } = B3, rng = mulberry32((sd * 1e9) >>> 0);
+  const { box, cyl, cone, vehicle, rubber } = B3, rng = mulberry32((sd * 1e9) >>> 0);
   const isR = o.t === 'r', L = isR ? Math.max(o.w, o.h) : o.r * 2, S = isR ? Math.min(o.w, o.h) : o.r * 2;
   const ry = isR ? (o.w >= o.h ? 0 : Math.PI / 2) + (rng() < 0.5 ? 0 : Math.PI) : rng() * 6.28;
   const ca = Math.cos(ry), sa = Math.sin(ry);
   const at = (lx, lz) => [cx + lx * ca + lz * sa, cy - lx * sa + lz * ca];
   const B = (lx, lz, y, sx, sy, sz, c, rx = 0, rz = 0) => { const [x, z] = at(lx, lz); box.add(mat(x, gz + y, z, sx, sy, sz, ry, rx, rz), c, sid); };
+  const PB = (lx, lz, y, sx, sy, sz, c, rx = 0, rz = 0) => { const [x, z] = at(lx, lz); vehicle.add(mat(x, gz + y, z, sx, sy, sz, ry, rx, rz), shade(c, 1.24), sid); };
   const C = (lx, lz, y, r, h, c) => { const [x, z] = at(lx, lz); cyl.add(mat(x, gz + y, z, r, h, r, ry), c, sid); };
-  const wheel = (lx, lz, r, w) => { const [x, z] = at(lx, lz - w / 2); cyl.add(mat(x, gz + r - 2, z, r, w, r, ry, Math.PI / 2), '#1c1c1a', sid); };
+  const wheel = (lx, lz, r, w) => { const [x, z] = at(lx, lz - w / 2); (rubber || cyl).add(mat(x, gz + r - 2, z, r, w, r, ry, Math.PI / 2), rubber ? '#ffffff' : '#1c1c1a', sid); };
   const olive = biome === 'desert' ? '#9a8256' : biome === 'snow' ? '#d9ddd8' : '#4f5638';
   switch (k) {
     case 'truck': {
       const c = shade(olive, 0.85 + sd * 0.3);
       B(0, 0, 4, L, 6, S * 0.86, '#2a2a26');
-      B(L * 0.33, 0, 9, L * 0.28, 27, S * 0.92, c);
+      PB(L * 0.33, 0, 9, L * 0.28, 27, S * 0.92, c);
       B(L * 0.475, 0, 22, 1.5, 9, S * 0.78, '#26303a');
       B(L * 0.47, 0, 9, 3, 10, S * 0.9, shade(c, 0.6));
-      B(-L * 0.15, 0, 10, L * 0.62, 6, S, shade(c, 0.8));
-      B(-L * 0.15, 0, 16, L * 0.6, 22, S * 0.96, biome === 'snow' ? '#c9c7b8' : '#6b6a4a');
+      PB(-L * 0.15, 0, 10, L * 0.62, 6, S, shade(c, 0.8));
+      PB(-L * 0.15, 0, 16, L * 0.6, 22, S * 0.96, biome === 'snow' ? '#c9c7b8' : '#6b6a4a');
       for (const lx of [L * 0.3, -L * 0.08, -L * 0.3]) for (const s of [-1, 1]) wheel(lx, s * S * 0.44, 9, 7);
       break;
     }
     case 'tank': {
       const c = shade(olive, 0.8 + sd * 0.3);
       for (const s of [-1, 1]) B(0, s * S * 0.38, -2, L * 1.02, 15, S * 0.25, '#262622');
-      B(0, 0, 6, L * 0.96, 15, S * 0.74, c);
-      B(-L * 0.06, 0, 21, L * 0.44, 12, S * 0.58, shade(c, 1.08));
+      PB(0, 0, 6, L * 0.96, 15, S * 0.74, c);
+      PB(-L * 0.06, 0, 21, L * 0.44, 12, S * 0.58, shade(c, 1.08));
       B(-L * 0.12, 0, 33, 10, 4, 10, shade(c, 0.8));
       const [bx, bz] = at(L * 0.16, 0); cyl.add(mat(bx, gz + 27, bz, 2.6, L * 0.62, 2.6, ry, 0, -Math.PI / 2 + (rng() - 0.5) * 0.25), shade(c, 0.7), sid);
       break;
@@ -983,10 +1024,10 @@ function buildProp(o, k, cx, cy, gz, sd, sid, B3, biome) {
     }
     case 'bus': {
       const c = shade(rng() < 0.5 ? '#c8a43a' : '#7b5a3a', 0.8 + sd * 0.3);
-      B(0, 0, 6, L, 42, S, c);
+      PB(0, 0, 6, L, 42, S, c);
       B(0, 0, 28, L * 0.92, 11, S + 1, '#23292d');
       B(L / 2, 0, 18, 1.5, 20, S * 0.85, '#23292d');
-      B(0, 0, 48, L * 0.98, 2, S * 0.96, shade(c, 0.75));
+      PB(0, 0, 48, L * 0.98, 2, S * 0.96, shade(c, 0.75));
       for (const lx of [L * 0.32, -L * 0.3]) for (const s of [-1, 1]) wheel(lx, s * S * 0.44, 10, 7);
       break;
     }
