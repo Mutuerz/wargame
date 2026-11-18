@@ -250,6 +250,7 @@ function damage(target, amount, attacker, head) {
   target.lastHitBy = attacker; target.lastHitT = G.time;
   if (target.isPlayer) { G.hurtT = 0.45; if (attacker) G.hurtFrom = Math.atan2(attacker.y - target.y, attacker.x - target.x); }
   if (attacker && attacker.isPlayer) { G.hitT = 0.15; if (head) G.headT = 0.3; SFX.hit(); }
+  else SFX.hitNear && SFX.hitNear(target.x, target.y);
   if (Math.random() < 0.6) stampBlood(G.art, target.x + rand(-10, 10), target.y + rand(-10, 10), rand(3, 7));
   for (let i = 0; i < 4; i++) G.particles.push({ type: 'blood', x: target.x, y: target.y, vx: rand(-80, 80), vy: rand(-80, 80), life: 0.4, max: 0.4, size: rand(1.5, 3) });
   if (target.hp <= 0) kill(target, attacker);

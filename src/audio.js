@@ -17,6 +17,7 @@ const SFX = {
       this.noise = buf;
       this.startWind();
       loadVoiceFiles();
+      this.loadClip('hitClip', 'sfx/bullet-hit.mp3');
     } catch (e) { this.ctx = null; }
   },
   toggle() { this.on = !this.on; if (this.master) this.master.gain.value = this.on ? 0.45 : 0; return this.on; },
@@ -63,7 +64,19 @@ const SFX = {
   beep(x, y) { if (this.ok()) this.tone(this.vol(x, y) * 0.4, 1760, 1760, 0.08, 'square'); },
   pickup() { if (this.ok()) { this.tone(0.2, 520, 780, 0.12, 'triangle'); } },
   capture(good) { if (this.ok()) { this.tone(0.25, good ? 440 : 330, good ? 880 : 165, 0.45, 'triangle'); } },
-  hit() { if (this.ok()) this.tone(0.12, 2400, 1800, 0.03, 'square'); },
+  // decoded once into a buffer so it plays instantly, as often as needed
+  loadClip(key, url) {
+    fetch(url).then(r => (r.ok ? r.arrayBuffer() : null)).then(b => b && this.ctx.decodeAudioData(b)).then(buf => { if (buf) this[key] = buf; }).catch(() => {});
+  },
+  clip(buf, v) {
+    const c = this.ctx, src = c.createBufferSource(), g = c.createGain();
+    src.buffer = buf; src.playbackRate.value = 0.94 + Math.random() * 0.12; g.gain.value = v;
+    src.connect(g); g.connect(this.master); src.start();
+  },
+  // you hit someone: the bullet-impact clip at full volume (synth tick until it has loaded)
+  hit() { if (!this.ok()) return; if (this.hitClip) this.clip(this.hitClip, 0.9); else this.tone(0.12, 2400, 1800, 0.03, 'square'); },
+  // anyone else hit (including you): the same clip, quieter with distance
+  hitNear(x, y) { if (this.ok() && this.hitClip) { const v = this.vol(x, y) * 0.55; if (v > 0.03) this.clip(this.hitClip, v); } },
   startWind() {
     const c = this.ctx;
     const src = c.createBufferSource(); src.buffer = this.noise; src.loop = true; src.playbackRate.value = 0.3;
