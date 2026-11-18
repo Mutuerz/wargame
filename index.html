@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bridgehead</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="src/style.css">
+</head>
+<body>
+<canvas id="view"></canvas>
+<canvas id="game"></canvas>
+
+<section id="menu" class="overlay">
+  <div class="card menu-card">
+    <header class="brand">
+      <h1>BRIDGEHEAD</h1>
+      <p>Ten against ten in first person. Hold all five sectors at the same time to win.</p>
+    </header>
+    <div class="menu-grid">
+      <div class="menu-col">
+        <h2>Theatre</h2>
+        <div id="biomes" class="biomes"></div>
+        <h2>Map seed</h2>
+        <div class="row">
+          <input id="seed" type="number" min="0" max="99999999" aria-label="Map seed">
+          <button id="reroll" class="ghost">New map</button>
+        </div>
+        <h2>Bot skill</h2>
+        <div id="skill" class="seg">
+          <button data-skill="0">Recruit</button>
+          <button data-skill="1" class="on">Veteran</button>
+          <button data-skill="2">Elite</button>
+        </div>
+        <button id="toDeploy" class="primary">Continue to deployment</button>
+        <button id="toOnline" class="ghost online-btn">Play online with friends</button>
+      </div>
+      <div class="menu-col preview-col">
+        <canvas id="preview" width="960" height="576"></canvas>
+        <p id="biomeDesc" class="desc"></p>
+        <ul class="legend">
+          <li><i class="dot blue"></i>Your base (west)</li>
+          <li><i class="dot red"></i>Enemy base (east)</li>
+          <li><i class="dot gold"></i>Sectors A to E (flag and borders)</li>
+          <li><i class="sq"></i>Bridge and supply depot</li>
+        </ul>
+      </div>
+    </div>
+    <p class="controls"><b>Click</b> to capture the mouse · <b>WASD</b> move · <b>Mouse</b> look · <b>Left click</b> fire · <b>R</b> reload · <b>Shift</b> sprint · <b>G</b> throw grenade where you look · <b>Right click</b> or <b>Q</b> aim down the sights (scope for snipers) · <b>Ctrl</b> or <b>C</b> crouch · <b>Space</b> jump, or vault low cover and windows · <b>1</b>/<b>2</b> main weapon / sidearm · <b>F</b> hold to plant or defuse C4 · <b>B</b> air strike (500 pts) · <b>M</b> map · <b>Tab</b> scores · <b>P</b> perks · <b>Esc</b> pause · <b>N</b> mute</p>
+  </div>
+</section>
+
+<section id="deploy" class="overlay" hidden>
+  <div class="card deploy-card">
+    <header class="deploy-head">
+      <div>
+        <h2 class="eyebrow">Commander briefing</h2>
+        <h1>Deploy your squad</h1>
+      </div>
+      <p>You command Blue. Left click a spawn on the map to send a soldier there, right click to pull one back. The Red commander deploys on its own.</p>
+    </header>
+    <div class="deploy-grid">
+      <canvas id="deployMap" width="960" height="576"></canvas>
+      <div class="deploy-side">
+        <div id="spotList" class="spots"></div>
+        <p id="unassigned" class="unassigned"></p>
+        <div class="row">
+          <button id="spread" class="ghost">Spread evenly</button>
+          <button id="clearSpots" class="ghost">Clear</button>
+        </div>
+        <div class="row">
+          <button id="backMenu" class="ghost">Back</button>
+          <button id="deployBtn" class="primary">Deploy</button>
+        </div>
+      </div>
+    </div>
+    <div class="loadout-head">
+      <h2>Loadout</h2>
+      <p class="desc">Pick the weapon each soldier carries for the whole match. Red's commander chooses its own.</p>
+      <button id="loadoutDefault" class="ghost">Reset to default mix</button>
+    </div>
+    <div id="loadout" class="loadout"></div>
+  </div>
+</section>
+
+<section id="online" class="overlay" hidden>
+  <div class="card online-card">
+    <header class="deploy-head">
+      <div>
+        <h2 class="eyebrow">Online</h2>
+        <h1 id="netTitle">Play with friends</h1>
+      </div>
+      <p>Everyone who types the same room code plays in the same match. The host sets how many bots join each team (up to 10 per side in total).</p>
+    </header>
+    <div id="netJoin" class="net-form">
+      <label>Your name <input id="netName" maxlength="16" autocomplete="nickname"></label>
+      <label>Room code <input id="netRoom" maxlength="8" placeholder="PUBLIC"></label>
+      <label class="wide">Server <input id="netServer" placeholder="wss://your-server" spellcheck="false"></label>
+      <p id="netStatus" class="net-status" role="status"></p>
+      <div class="row">
+        <button id="netBack" class="ghost">Back</button>
+        <button id="netConnect" class="primary">Join room</button>
+      </div>
+    </div>
+    <div id="netRoomView" class="net-room" hidden>
+      <div class="net-teams">
+        <div class="net-team blue"><h2>Blue</h2><ul id="netTeam0"></ul></div>
+        <div class="net-team red"><h2>Red</h2><ul id="netTeam1"></ul></div>
+      </div>
+      <div class="net-controls">
+        <button id="netSwitch" class="ghost">Switch team</button>
+        <label>Your weapon <select id="netCls"></select></label>
+      </div>
+      <div id="netHostBox" class="net-controls">
+        <label>Theatre <select id="netBiome"></select></label>
+        <label>Map seed <input id="netSeed" type="number" min="0" max="99999999"></label>
+        <label>Bots per team <select id="netBots"></select></label>
+        <label>Bot skill <select id="netSkill"><option value="0">Recruit</option><option value="1">Veteran</option><option value="2">Elite</option></select></label>
+      </div>
+      <p id="netRoomInfo" class="net-status" role="status"></p>
+      <div class="row">
+        <button id="netLeave" class="ghost">Leave room</button>
+        <button id="netStart" class="primary">Start match</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="respawn" class="dock" hidden>
+  <div class="card dock-card">
+    <p id="respawnText"></p>
+    <div id="respawnOpts" aria-label="Weapon for your next life"></div>
+  </div>
+</section>
+
+<section id="perks" class="overlay soft" hidden>
+  <div class="card perk-card">
+    <header class="deploy-head">
+      <div>
+        <h2 class="eyebrow">Perk points</h2>
+        <h1>Field upgrades</h1>
+      </div>
+      <button id="closePerks" class="ghost">Close (P)</button>
+    </header>
+    <div class="perk-stats">
+      <div><span>Team pool</span><b id="perkTeam">0</b></div>
+      <div><span>Your points</span><b id="perkMine">0</b></div>
+    </div>
+    <p class="desc">Your team earns 100 points each time it conquers a point and 5 points every 10 seconds for each point it holds. You also earn 25 for being on a point when it falls. Perks are not designed yet, so the slots below are empty and the points keep banking.</p>
+    <div id="perkList" class="perk-list"></div>
+  </div>
+</section>
+
+<section id="pause" class="overlay" hidden>
+  <div class="card small-card">
+    <h1 id="pauseTitle">Paused</h1>
+    <div class="col-btns">
+      <button id="resume" class="primary">Resume</button>
+      <button id="quit" class="ghost">Quit to menu</button>
+    </div>
+  </div>
+</section>
+
+<section id="over" class="overlay" hidden>
+  <div class="card over-card">
+    <h2 class="eyebrow" id="overEyebrow">Match over</h2>
+    <h1 id="overTitle">Victory</h1>
+    <p id="overText" class="desc"></p>
+    <div id="overStats" class="over-stats"></div>
+    <div class="row">
+      <button id="rematch" class="primary">Rematch on this map</button>
+      <button id="toMenu" class="ghost">Main menu</button>
+    </div>
+  </div>
+</section>
+
+<script src="src/config.js"></script>
+<script src="src/util.js"></script>
+<script src="src/audio.js"></script>
+<script src="src/mapgen.js"></script>
+<script src="src/render-map.js"></script>
+<script src="src/nav.js"></script>
+<script src="src/perks.js"></script>
+<script src="src/game.js"></script>
+<script src="src/bots.js"></script>
+<script src="src/vendor/three.min.js"></script>
+<script src="src/vendor/three-post.min.js"></script>
+<script src="src/render3d.js"></script>
+<script src="src/viewmodel.js"></script>
+<script src="src/render.js"></script>
+<script src="src/ui.js"></script>
+<script src="src/net.js"></script>
+<script src="src/feel.js"></script>
+<script src="src/killcam.js"></script>
+<script src="src/post.js"></script>
+<script src="src/surface.js"></script>
+</body>
+</html>
