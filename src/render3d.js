@@ -252,14 +252,14 @@ function r3Build(m, art) {
     }
     switch (k) {
       case 'tree': {
-        const r = o.r;
+        const r = o.vr || o.r;
         bark.add(mat(cx, gz - sink, cy, r * 0.32, 95 + sink, r * 0.32), '#ffffff', sid);
         leaves.add(mat(cx, gz + 120 + sd * 20, cy, r * 2.0, r * 1.7, r * 2.0, sd * 6), shade('#ffffff', 0.9 + sd * 0.2), sid);
         leaves.add(mat(cx + r * 0.5, gz + 165 + sd * 15, cy - r * 0.3, r * 1.4, r * 1.3, r * 1.4, sd * 3), shade('#ffffff', 0.95 + sd * 0.15), sid);
         break;
       }
       case 'pine': {
-        const r = o.r;
+        const r = o.vr || o.r;
         bark.add(mat(cx, gz - sink, cy, r * 0.28, 70 + sink, r * 0.28), '#ffffff', sid);
         cone.add(mat(cx, gz + 50, cy, r * 2.1, 110, r * 2.1, sd * 6), shade(B.tree, 1 + sd * 0.3), sid);
         cone.add(mat(cx, gz + 115, cy, r * 1.6, 95, r * 1.6, sd * 4), shade(B.treeMid, 1 + sd * 0.3), sid);
@@ -267,7 +267,7 @@ function r3Build(m, art) {
         break;
       }
       case 'deadtree': {
-        const r = o.r;
+        const r = o.vr || o.r;
         bark.add(mat(cx, gz - sink, cy, r * 0.45, 140 + sink, r * 0.45), '#b4a18a', sid);
         box.add(mat(cx, gz + 80, cy, 4, 60, 4, sd * 6, 0.7), '#3b3424', sid);
         box.add(mat(cx, gz + 105, cy, 3, 45, 3, sd * 6 + 2, -0.6), '#3b3424', sid);
@@ -279,9 +279,9 @@ function r3Build(m, art) {
         break;
       }
       case 'cactus': {
-        cyl.add(mat(cx, gz - sink, cy, o.r * 0.7, 52 + sink, o.r * 0.7), '#5d7f3a', sid);
-        cyl.add(mat(cx + o.r * 0.9, gz + 22, cy, o.r * 0.4, 18, o.r * 0.4), '#5d7f3a', sid);
-        cyl.add(mat(cx - o.r * 0.9, gz + 28, cy, o.r * 0.4, 14, o.r * 0.4), '#5d7f3a', sid);
+        cyl.add(mat(cx, gz - sink, cy, (o.vr || o.r) * 0.7, 52 + sink, (o.vr || o.r) * 0.7), '#5d7f3a', sid);
+        cyl.add(mat(cx + (o.vr || o.r) * 0.9, gz + 22, cy, (o.vr || o.r) * 0.4, 18, (o.vr || o.r) * 0.4), '#5d7f3a', sid);
+        cyl.add(mat(cx - (o.vr || o.r) * 0.9, gz + 28, cy, (o.vr || o.r) * 0.4, 14, (o.vr || o.r) * 0.4), '#5d7f3a', sid);
         break;
       }
       case 'bag': {

@@ -297,6 +297,10 @@ function tryGenerate(bk, seed, density) {
   // center house over point C: doors facing both bases (west and east), stairs inside
   const ch = house(W / 2 - 160, H / 2 - 120, 320, 240, { doors: [1, 3], stories: 2 });
   for (const o of ch) { o.bb = shapeBB(o); o.seed = R(); solids.push(o); }
+  // trees and cacti block only where the trunk is: the drawn trunk is about a third of the footprint the
+  // placement used (vr keeps that size for drawing), so you no longer bump into thin air around them
+  const TRUNK = { tree: 0.32, pine: 0.28, deadtree: 0.45, cactus: 0.75 };
+  for (const o of solids) if (TRUNK[o.kind] && o.t === 'c') { o.vr = o.r; o.r = Math.max(4, o.r * TRUNK[o.kind]); o.bb = shapeBB(o); }
   solids.forEach((o, i) => { o.id = i; });
   const b1 = rotShape(bridge); b1.cx = W - bridge.cx; b1.cy = H - bridge.cy; b1.gap = rotShape(bridge.gap);
   return {

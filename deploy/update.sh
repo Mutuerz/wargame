@@ -10,4 +10,8 @@ git -C "$APP" reset --hard FETCH_HEAD
 (cd "$APP/server" && npm ci --omit=dev --no-audit --no-fund)
 chown -R bridgehead:bridgehead "$APP"
 systemctl restart bridgehead
+# older Caddy configs only served /src and /sfx: let the texture and sky files in assets/ through too
+if [ -f /etc/caddy/Caddyfile ] && grep -q '/src/\* /sfx/\*$' /etc/caddy/Caddyfile; then
+  sed -i 's|/src/\* /sfx/\*$|/src/* /sfx/* /assets/*|' /etc/caddy/Caddyfile && (systemctl reload caddy || systemctl restart caddy)
+fi
 echo "Updated $BRANCH to $(git -C "$APP" log -1 --format='%h %s') and restarted."

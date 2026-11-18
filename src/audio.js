@@ -27,6 +27,7 @@ const SFX = {
       this.loadClip('hurtClip', 'sfx/hurt.mp3');
       this.loadClip('ammoClip', 'sfx/ammo-pickup.mp3');
       this.loadClip('bestClip', 'sfx/best-play.mp3');
+      this.loadClip('killClip', 'sfx/kill.mp3');
     } catch (e) { this.ctx = null; }
   },
   toggle() { this.on = !this.on; if (this.master) this.master.gain.value = this.on ? 0.45 : 0; return this.on; },
@@ -182,8 +183,8 @@ function announceKill(n, head, dist, name) {
   if (G) G.killFx = { n, text, t: n > 1 ? 2.2 : 1.4, max: n > 1 ? 2.2 : 1.4 };
   if (!SFX.ok()) return;
   // sting: a deep hit, brighter and longer for bigger streaks
-  SFX.tone(0.35, 150, 50, 0.35 + n * 0.08, 'sawtooth');
-  SFX.burst(0.25, 900, 0.8, 0.25);
+  if (SFX.killClip) SFX.clip(SFX.killClip, 0.9);   // Juanes's impact clip on every enemy kill
+  else { SFX.tone(0.35, 150, 50, 0.35 + n * 0.08, 'sawtooth'); SFX.burst(0.25, 900, 0.8, 0.25); }
   if (n > 1) setTimeout(() => SFX.ok() && SFX.tone(0.16, 440 + n * 110, 880 + n * 220, 0.25 + n * 0.05, 'triangle'), 90);
   // a headshot kill plays the headshot clip; a multi-kill voice then waits until it is done
   const hs = head && SFX.hsClip;

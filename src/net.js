@@ -417,12 +417,12 @@ function netMove(s, inp, dt) {
     const k = 1 - Math.exp(-dt * 14);
     s.vx = lerp(s.vx, mvx * speed, k); s.vy = lerp(s.vy, mvy * speed, k);
   }
-  const ox = s.x, oy = s.y;
+  const ox = s.x, oy = s.y, sup0 = elevAt(G.m, s.x, s.y) + (s.z || 0);
   s.x += s.vx * dt; s.y += s.vy * dt;
   collideCircle(G.m, s, CFG.R, (s.z || 0) + (s.jz || 0));
   airStep(s, dt);
   if (falling) { s.para = Math.max(0, s.para - CFG.PARA_FALL * dt); s.z = 0; }
-  else updateFloor(G.m, s, ox, oy);
+  else { updateFloor(G.m, s, ox, oy); fallFrom(s, sup0); }
 }
 
 // Tracers are cosmetic on the client: they stop at walls and soldiers, the server decides the hits.

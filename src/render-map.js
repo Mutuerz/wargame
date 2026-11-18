@@ -163,7 +163,7 @@ function renderGround(m) {
   for (const o of m.solids) {
     const off = o.kind === 'tree' || o.kind === 'pine' ? 14 : 8;
     g.beginPath();
-    if (o.t === 'c') g.arc(o.x + off, o.y + off * 1.2, o.r * (o.kind === 'tree' || o.kind === 'pine' ? 1.05 : 0.95), 0, TAU);
+    if (o.t === 'c') g.arc(o.x + off, o.y + off * 1.2, (o.vr || o.r) * (o.kind === 'tree' || o.kind === 'pine' ? 1.05 : 0.95), 0, TAU);
     else g.rect(o.x + off, o.y + off, o.w, o.h);
     g.fill();
   }
@@ -236,12 +236,12 @@ function circle(c, x, y, r) { c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); }
 function drawSolid(c, o, B) {
   const k = o.kind;
   if (k === 'tree') {
-    const r = o.r;
+    const r = o.vr || o.r;
     c.fillStyle = B.tree; circle(c, o.x, o.y, r);
     c.fillStyle = B.treeMid; circle(c, o.x - r * 0.15, o.y - r * 0.18, r * 0.74);
     c.fillStyle = B.treeHi; circle(c, o.x - r * 0.32, o.y - r * 0.34, r * 0.36);
   } else if (k === 'pine') {
-    const r = o.r, n = 9;
+    const r = o.vr || o.r, n = 9;
     c.fillStyle = B.tree; c.beginPath();
     for (let i = 0; i < n * 2; i++) { const a = i / (n * 2) * TAU + o.seed * 3, rr = i % 2 ? r * 0.62 : r; c.lineTo(o.x + Math.cos(a) * rr, o.y + Math.sin(a) * rr); }
     c.closePath(); c.fill();
@@ -300,17 +300,17 @@ function drawSolid(c, o, B) {
     if (o.w > o.h) for (let x = o.x + 6; x < o.x + o.w - 6; x += 16) c.fillRect(x, o.y + 3, 6, o.h - 6);
     else for (let y = o.y + 6; y < o.y + o.h - 6; y += 16) c.fillRect(o.x + 3, y, o.w - 6, 6);
   } else if (k === 'cactus') {
-    c.fillStyle = '#4c6b2c'; circle(c, o.x, o.y, o.r);
-    c.fillStyle = '#6f9145'; circle(c, o.x - 2, o.y - 2, o.r * 0.6);
+    c.fillStyle = '#4c6b2c'; circle(c, o.x, o.y, (o.vr || o.r));
+    c.fillStyle = '#6f9145'; circle(c, o.x - 2, o.y - 2, (o.vr || o.r) * 0.6);
     c.strokeStyle = '#e9e2bf'; c.lineWidth = 1; c.beginPath();
-    for (let i = 0; i < 8; i++) { const a = i / 8 * TAU; c.moveTo(o.x + Math.cos(a) * o.r, o.y + Math.sin(a) * o.r); c.lineTo(o.x + Math.cos(a) * (o.r + 4), o.y + Math.sin(a) * (o.r + 4)); }
+    for (let i = 0; i < 8; i++) { const a = i / 8 * TAU; c.moveTo(o.x + Math.cos(a) * (o.vr || o.r), o.y + Math.sin(a) * (o.vr || o.r)); c.lineTo(o.x + Math.cos(a) * ((o.vr || o.r) + 4), o.y + Math.sin(a) * ((o.vr || o.r) + 4)); }
     c.stroke();
   } else if (k === 'deadtree') {
     c.strokeStyle = '#3b3122'; c.lineWidth = 4; c.lineCap = 'round'; c.beginPath();
-    for (let i = 0; i < 5; i++) { const a = o.seed * 7 + i * 1.3, l = o.r * 1.9; c.moveTo(o.x, o.y); c.lineTo(o.x + Math.cos(a) * l, o.y + Math.sin(a) * l); }
+    for (let i = 0; i < 5; i++) { const a = o.seed * 7 + i * 1.3, l = (o.vr || o.r) * 1.9; c.moveTo(o.x, o.y); c.lineTo(o.x + Math.cos(a) * l, o.y + Math.sin(a) * l); }
     c.stroke();
-    c.fillStyle = '#4a3d2a'; circle(c, o.x, o.y, o.r);
-    c.fillStyle = '#5e4f37'; circle(c, o.x - 2, o.y - 2, o.r * 0.55);
+    c.fillStyle = '#4a3d2a'; circle(c, o.x, o.y, (o.vr || o.r));
+    c.fillStyle = '#5e4f37'; circle(c, o.x - 2, o.y - 2, (o.vr || o.r) * 0.55);
   } else if (k === 'snowwall') {
     c.fillStyle = '#b5c6d3'; c.fillRect(o.x, o.y, o.w, o.h);
     c.fillStyle = '#f4f8fa'; c.fillRect(o.x + 2, o.y + 2, o.w - 4, o.h - 6);

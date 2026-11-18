@@ -245,6 +245,14 @@ function vaultStep(m, s, dt) {
     if (s.z < z0) { s.jz = z0 - s.z; s.jv = 0; }   // out of an upper-floor window: fall to the ground
   }
 }
+// Stepping off a ledge, a roof edge, a cliff or an upper floor: the drop becomes air height, so you fall under
+// the same gravity as a jump instead of snapping down. Gentle slopes (under ~6 px per tick) are just walked down.
+function fallFrom(s, sup0) {
+  const sup = elevAt(G.m, s.x, s.y) + (s.z || 0);
+  if (sup >= sup0 - 6) return;
+  if (!(s.jz > 0)) s.jv = 0;
+  s.jz = (s.jz || 0) + sup0 - sup;
+}
 function airStep(s, dt) {
   if (!(s.jz > 0 || s.jv > 0)) return;
   s.jv -= CFG.GRAV * dt; s.jz += s.jv * dt;
@@ -398,12 +406,12 @@ function updateSoldier(s, dt, ctl) {
     const k = 1 - Math.exp(-dt * 14);
     s.vx = lerp(s.vx, mvx * speed, k); s.vy = lerp(s.vy, mvy * speed, k);
   }
-  const ox = s.x, oy = s.y;
+  const ox = s.x, oy = s.y, sup0 = elevAt(m, s.x, s.y) + (s.z || 0);
   s.x += s.vx * dt; s.y += s.vy * dt;
   collideCircle(m, s, CFG.R, (s.z || 0) + (s.jz || 0));
   airStep(s, dt);
   if (s.para > 0) { s.para = Math.max(0, s.para - CFG.PARA_FALL * dt); s.z = 0; }
-  else updateFloor(m, s, ox, oy);
+  else { updateFloor(m, s, ox, oy); fallFrom(s, sup0); }
   if (moving && !(s.para > 0)) s.walkPhase += dt * speed * 0.12;
 
   s.fireCD -= dt;
